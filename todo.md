@@ -35,3 +35,11 @@
 
 ## Bug Fixes
 - [x] Fix PDF upload failure issue
+
+## Enhancements
+- [x] AutoCAD-style crosshair cursor for precision drawing
+- [x] Show straight lines between measurement points with distance labels
+- [x] Display distance in feet for each line segment
+- [x] Display area in square feet automatically when closing a shape
+- [x] Real-time preview line from last point to cursor position
+- [x] Add visual feedback for line measurements during drawing

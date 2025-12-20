@@ -47,6 +47,7 @@ export default function MeasurementCanvas() {
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [notes, setNotes] = useState("");
+  const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -131,6 +132,14 @@ export default function MeasurementCanvas() {
     renderPage();
   }, [pdfDoc, currentPage]);
 
+  // Calculate distance between two points in pixels, then convert to feet
+  const calculateDistance = (p1: Point, p2: Point): number => {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+    return pixelDistance * scale;
+  };
+
   // Redraw overlay with measurements
   const redrawOverlay = () => {
     const canvas = overlayCanvasRef.current;
@@ -155,39 +164,133 @@ export default function MeasurementCanvas() {
       ctx.fill();
       ctx.stroke();
 
-      // Draw label
+      // Draw label with area
       const centerX = coords.reduce((sum, p) => sum + p.x, 0) / coords.length;
       const centerY = coords.reduce((sum, p) => sum + p.y, 0) / coords.length;
-      ctx.fillStyle = measurement.color;
-      ctx.font = "14px sans-serif";
+      ctx.fillStyle = "#000";
+      ctx.fillRect(centerX - 60, centerY - 25, 120, 40);
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 12px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(measurement.name, centerX, centerY);
+      ctx.fillText(measurement.name, centerX, centerY - 8);
+      ctx.font = "11px sans-serif";
+      ctx.fillText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 8);
     });
 
-    // Draw current polygon
+    // Draw current polygon with AutoCAD-style lines and measurements
     if (currentPolygon.length > 0) {
-      ctx.fillStyle = selectedColor + "40";
+      // Draw lines between points
       ctx.strokeStyle = selectedColor;
       ctx.lineWidth = 2;
+      ctx.setLineDash([]);
 
-      ctx.beginPath();
-      ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
-      currentPolygon.forEach((point) => ctx.lineTo(point.x, point.y));
-      ctx.stroke();
+      for (let i = 0; i < currentPolygon.length; i++) {
+        const p1 = currentPolygon[i];
+        const p2 = currentPolygon[(i + 1) % currentPolygon.length];
+        
+        if (i < currentPolygon.length - 1 || currentPolygon.length >= 3) {
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+
+          // Draw distance label on each line
+          if (i < currentPolygon.length - 1) {
+            const distance = calculateDistance(p1, p2);
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            
+            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+            ctx.fillRect(midX - 30, midY - 12, 60, 20);
+            ctx.fillStyle = "#fff";
+            ctx.font = "11px sans-serif";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
+          }
+        }
+      }
+
+      // Draw preview line from last point to cursor
+      if (cursorPosition && currentPolygon.length > 0) {
+        const lastPoint = currentPolygon[currentPolygon.length - 1];
+        ctx.strokeStyle = selectedColor;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(cursorPosition.x, cursorPosition.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Show distance for preview line
+        const distance = calculateDistance(lastPoint, cursorPosition);
+        const midX = (lastPoint.x + cursorPosition.x) / 2;
+        const midY = (lastPoint.y + cursorPosition.y) / 2;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillRect(midX - 30, midY - 12, 60, 20);
+        ctx.fillStyle = "#fff";
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
+      }
 
       // Draw points
-      currentPolygon.forEach((point) => {
+      currentPolygon.forEach((point, index) => {
         ctx.beginPath();
-        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
-        ctx.fillStyle = selectedColor;
+        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff";
         ctx.fill();
+        ctx.strokeStyle = selectedColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
       });
+
+      // Show area preview if shape can be closed
+      if (currentPolygon.length >= 3) {
+        const area = calculateArea(currentPolygon);
+        const centerX = currentPolygon.reduce((sum, p) => sum + p.x, 0) / currentPolygon.length;
+        const centerY = currentPolygon.reduce((sum, p) => sum + p.y, 0) / currentPolygon.length;
+        
+        ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+        ctx.fillRect(centerX - 50, centerY - 15, 100, 30);
+        ctx.fillStyle = "#4ade80";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`Area: ${area.toFixed(1)} ${scaleUnit}²`, centerX, centerY);
+      }
+    }
+
+    // Draw crosshair cursor
+    if (isDrawing && cursorPosition) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      
+      // Horizontal line
+      ctx.beginPath();
+      ctx.moveTo(0, cursorPosition.y);
+      ctx.lineTo(canvas.width, cursorPosition.y);
+      ctx.stroke();
+      
+      // Vertical line
+      ctx.beginPath();
+      ctx.moveTo(cursorPosition.x, 0);
+      ctx.lineTo(cursorPosition.x, canvas.height);
+      ctx.stroke();
+      
+      // Center circle
+      ctx.beginPath();
+      ctx.arc(cursorPosition.x, cursorPosition.y, 8, 0, Math.PI * 2);
+      ctx.stroke();
     }
   };
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit]);
 
   // Handle canvas click
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -341,8 +444,20 @@ export default function MeasurementCanvas() {
             <canvas
               ref={overlayCanvasRef}
               onClick={handleCanvasClick}
-              className="absolute top-0 left-0 cursor-crosshair"
-              style={{ pointerEvents: isDrawing ? "auto" : "none" }}
+              onMouseMove={(e) => {
+                if (!isDrawing) return;
+                const canvas = overlayCanvasRef.current!;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                setCursorPosition({ x, y });
+              }}
+              onMouseLeave={() => setCursorPosition(null)}
+              className="absolute top-0 left-0"
+              style={{ 
+                pointerEvents: isDrawing ? "auto" : "none",
+                cursor: isDrawing ? "none" : "default"
+              }}
             />
           </div>
         </div>
