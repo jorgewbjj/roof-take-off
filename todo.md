@@ -32,3 +32,6 @@
 - [x] S3 file upload for PDFs
 - [x] tRPC procedures for CRUD operations
 - [x] Elegant design system with consistent theming
+
+## Bug Fixes
+- [x] Fix PDF upload failure issue

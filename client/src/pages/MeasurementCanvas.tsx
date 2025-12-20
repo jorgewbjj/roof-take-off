@@ -12,8 +12,11 @@ import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+// Configure PDF.js worker - use local worker from node_modules
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 type Point = { x: number; y: number };
 
@@ -81,8 +84,14 @@ export default function MeasurementCanvas() {
 
     const loadPdf = async () => {
       try {
-        const loadingTask = pdfjsLib.getDocument(project.pdfUrl);
+        console.log("Loading PDF from URL:", project.pdfUrl);
+        const loadingTask = pdfjsLib.getDocument({
+          url: project.pdfUrl,
+          withCredentials: false,
+          isEvalSupported: false,
+        });
         const pdf = await loadingTask.promise;
+        console.log("PDF loaded successfully, pages:", pdf.numPages);
         setPdfDoc(pdf);
         setScale(parseFloat(project.scale || "1.0"));
         setScaleUnit(project.scaleUnit || "ft");
@@ -90,7 +99,7 @@ export default function MeasurementCanvas() {
         setNewProjectName(project.name);
       } catch (error) {
         console.error("Error loading PDF:", error);
-        toast.error("Failed to load PDF");
+        toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     };
 

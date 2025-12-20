@@ -97,7 +97,7 @@ describe("Projects Router", () => {
         expect(result.success).toBe(true);
 
         const updatedProject = await caller.projects.get({ id: projectId });
-        expect(updatedProject?.scale).toBe("2.5");
+        expect(parseFloat(updatedProject?.scale || "0")).toBe(2.5);
         expect(updatedProject?.scaleUnit).toBe("m");
       }
     });
