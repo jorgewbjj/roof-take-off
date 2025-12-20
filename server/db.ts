@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,81 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Project queries
+export async function getUserProjects(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(projects).where(eq(projects.userId, userId)).orderBy(desc(projects.updatedAt));
+}
+
+export async function getProjectById(projectId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  
+  const result = await db.select().from(projects).where(
+    and(eq(projects.id, projectId), eq(projects.userId, userId))
+  ).limit(1);
+  
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function createProject(project: InsertProject) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(projects).values(project);
+  return result[0].insertId;
+}
+
+export async function updateProject(projectId: number, userId: number, updates: Partial<InsertProject>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(projects).set(updates).where(
+    and(eq(projects.id, projectId), eq(projects.userId, userId))
+  );
+}
+
+export async function deleteProject(projectId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  // Delete all measurements first
+  await db.delete(measurements).where(eq(measurements.projectId, projectId));
+  
+  // Delete the project
+  await db.delete(projects).where(
+    and(eq(projects.id, projectId), eq(projects.userId, userId))
+  );
+}
+
+// Measurement queries
+export async function getProjectMeasurements(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(measurements).where(eq(measurements.projectId, projectId)).orderBy(desc(measurements.createdAt));
+}
+
+export async function createMeasurement(measurement: InsertMeasurement) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(measurements).values(measurement);
+  return result[0].insertId;
+}
+
+export async function updateMeasurement(measurementId: number, updates: Partial<InsertMeasurement>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.update(measurements).set(updates).where(eq(measurements.id, measurementId));
+}
+
+export async function deleteMeasurement(measurementId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  await db.delete(measurements).where(eq(measurements.id, measurementId));
+}

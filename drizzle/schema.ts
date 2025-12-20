@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, decimal } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,37 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Projects table - stores roof plan projects with PDF references
+ */
+export const projects = mysqlTable("projects", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  pdfUrl: text("pdfUrl").notNull(),
+  pdfKey: text("pdfKey").notNull(),
+  scale: decimal("scale", { precision: 10, scale: 4 }).default("1.0000"),
+  scaleUnit: varchar("scaleUnit", { length: 20 }).default("ft"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = typeof projects.$inferInsert;
+
+/**
+ * Measurements table - stores individual area measurements for each project
+ */
+export const measurements = mysqlTable("measurements", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  color: varchar("color", { length: 7 }).notNull(), // Hex color code
+  area: decimal("area", { precision: 12, scale: 2 }).notNull(),
+  coordinates: json("coordinates").notNull(), // Array of {x, y} points
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Measurement = typeof measurements.$inferSelect;
+export type InsertMeasurement = typeof measurements.$inferInsert;

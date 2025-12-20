@@ -1,0 +1,538 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { trpc } from "@/lib/trpc";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useParams } from "wouter";
+import { toast } from "sonner";
+import * as pdfjsLib from "pdfjs-dist";
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+
+type Point = { x: number; y: number };
+
+const PRESET_COLORS = [
+  "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6",
+  "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16"
+];
+
+export default function MeasurementCanvas() {
+  const { id } = useParams<{ id: string }>();
+  const projectId = parseInt(id || "0");
+  const { user, loading: authLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [scale, setScale] = useState(1.0);
+  const [scaleUnit, setScaleUnit] = useState("ft");
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentPolygon, setCurrentPolygon] = useState<Point[]>([]);
+  const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
+  const [measurementName, setMeasurementName] = useState("");
+  const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
+  const [editingProjectName, setEditingProjectName] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const utils = trpc.useUtils();
+  const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
+  const { data: measurements, isLoading: measurementsLoading } = trpc.measurements.list.useQuery({ projectId });
+
+  const updateProjectMutation = trpc.projects.update.useMutation({
+    onSuccess: () => {
+      utils.projects.get.invalidate({ id: projectId });
+      toast.success("Project updated");
+      setEditingProjectName(false);
+    },
+  });
+
+  const createMeasurementMutation = trpc.measurements.create.useMutation({
+    onSuccess: () => {
+      utils.measurements.list.invalidate({ projectId });
+      toast.success("Measurement saved");
+      setCurrentPolygon([]);
+      setMeasurementName("");
+      redrawOverlay();
+    },
+  });
+
+  const deleteMeasurementMutation = trpc.measurements.delete.useMutation({
+    onSuccess: () => {
+      utils.measurements.list.invalidate({ projectId });
+      toast.success("Measurement deleted");
+      redrawOverlay();
+    },
+  });
+
+  // Load PDF
+  useEffect(() => {
+    if (!project?.pdfUrl) return;
+
+    const loadPdf = async () => {
+      try {
+        const loadingTask = pdfjsLib.getDocument(project.pdfUrl);
+        const pdf = await loadingTask.promise;
+        setPdfDoc(pdf);
+        setScale(parseFloat(project.scale || "1.0"));
+        setScaleUnit(project.scaleUnit || "ft");
+        setNotes(project.notes || "");
+        setNewProjectName(project.name);
+      } catch (error) {
+        console.error("Error loading PDF:", error);
+        toast.error("Failed to load PDF");
+      }
+    };
+
+    loadPdf();
+  }, [project]);
+
+  // Render PDF page
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current) return;
+
+    const renderPage = async () => {
+      const page = await pdfDoc.getPage(currentPage);
+      const canvas = canvasRef.current!;
+      const context = canvas.getContext("2d")!;
+
+      const viewport = page.getViewport({ scale: 1.5 });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+
+      if (overlayCanvasRef.current) {
+        overlayCanvasRef.current.width = viewport.width;
+        overlayCanvasRef.current.height = viewport.height;
+      }
+
+      await page.render({ canvasContext: context, viewport, canvas }).promise;
+      redrawOverlay();
+    };
+
+    renderPage();
+  }, [pdfDoc, currentPage]);
+
+  // Redraw overlay with measurements
+  const redrawOverlay = () => {
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw saved measurements
+    measurements?.forEach((measurement) => {
+      const coords = measurement.coordinates as Point[];
+      if (coords.length < 3) return;
+
+      ctx.fillStyle = measurement.color + "40";
+      ctx.strokeStyle = measurement.color;
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(coords[0].x, coords[0].y);
+      coords.forEach((point) => ctx.lineTo(point.x, point.y));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw label
+      const centerX = coords.reduce((sum, p) => sum + p.x, 0) / coords.length;
+      const centerY = coords.reduce((sum, p) => sum + p.y, 0) / coords.length;
+      ctx.fillStyle = measurement.color;
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(measurement.name, centerX, centerY);
+    });
+
+    // Draw current polygon
+    if (currentPolygon.length > 0) {
+      ctx.fillStyle = selectedColor + "40";
+      ctx.strokeStyle = selectedColor;
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(currentPolygon[0].x, currentPolygon[0].y);
+      currentPolygon.forEach((point) => ctx.lineTo(point.x, point.y));
+      ctx.stroke();
+
+      // Draw points
+      currentPolygon.forEach((point) => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = selectedColor;
+        ctx.fill();
+      });
+    }
+  };
+
+  useEffect(() => {
+    redrawOverlay();
+  }, [measurements, currentPolygon, selectedColor]);
+
+  // Handle canvas click
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+
+    const canvas = overlayCanvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    setCurrentPolygon([...currentPolygon, { x, y }]);
+  };
+
+  // Complete polygon
+  const completePolygon = () => {
+    if (currentPolygon.length < 3) {
+      toast.error("Need at least 3 points to create a measurement");
+      return;
+    }
+    setIsNameDialogOpen(true);
+  };
+
+  // Calculate polygon area using Shoelace formula
+  const calculateArea = (points: Point[]): number => {
+    let area = 0;
+    for (let i = 0; i < points.length; i++) {
+      const j = (i + 1) % points.length;
+      area += points[i].x * points[j].y;
+      area -= points[j].x * points[i].y;
+    }
+    return Math.abs(area / 2) * scale * scale;
+  };
+
+  // Save measurement
+  const saveMeasurement = () => {
+    if (!measurementName.trim()) {
+      toast.error("Please enter a name for this measurement");
+      return;
+    }
+
+    const area = calculateArea(currentPolygon);
+    createMeasurementMutation.mutate({
+      projectId,
+      name: measurementName,
+      color: selectedColor,
+      area: area.toFixed(2),
+      coordinates: currentPolygon,
+    });
+    setIsNameDialogOpen(false);
+  };
+
+  // Export measurements
+  const exportMeasurements = () => {
+    if (!measurements || measurements.length === 0) {
+      toast.error("No measurements to export");
+      return;
+    }
+
+    const data = measurements.map((m) => ({
+      name: m.name,
+      area: `${m.area} ${scaleUnit}²`,
+      color: m.color,
+    }));
+
+    const csv = [
+      "Name,Area,Color",
+      ...data.map((row) => `"${row.name}","${row.area}","${row.color}"`),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${project?.name || "measurements"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Measurements exported");
+  };
+
+  if (authLoading || projectLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user || !project) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Card>
+          <CardHeader>
+            <CardTitle>Project Not Found</CardTitle>
+            <CardDescription>The project you're looking for doesn't exist</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setLocation("/projects")}>Back to Projects</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="border-b border-border bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="sm" onClick={() => setLocation("/projects")}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+            <Separator orientation="vertical" className="h-6" />
+            {editingProjectName ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  className="w-64"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => updateProjectMutation.mutate({ id: projectId, name: newProjectName })}
+                >
+                  <Save className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-semibold text-foreground">{project.name}</h1>
+                <Button variant="ghost" size="sm" onClick={() => setEditingProjectName(true)}>
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={exportMeasurements} className="gap-2">
+            <Download className="w-4 h-4" />
+            Export
+          </Button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Canvas Area */}
+        <div className="flex-1 overflow-auto p-6" ref={containerRef}>
+          <div className="relative inline-block">
+            <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg" />
+            <canvas
+              ref={overlayCanvasRef}
+              onClick={handleCanvasClick}
+              className="absolute top-0 left-0 cursor-crosshair"
+              style={{ pointerEvents: isDrawing ? "auto" : "none" }}
+            />
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="w-80 border-l border-border bg-card overflow-y-auto">
+          <div className="p-6 space-y-6">
+            {/* Drawing Tools */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Drawing Tools</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Button
+                    variant={isDrawing ? "default" : "outline"}
+                    onClick={() => {
+                      setIsDrawing(!isDrawing);
+                      if (isDrawing) setCurrentPolygon([]);
+                    }}
+                    className="flex-1"
+                  >
+                    {isDrawing ? "Stop Drawing" : "Start Drawing"}
+                  </Button>
+                  {isDrawing && currentPolygon.length >= 3 && (
+                    <Button onClick={completePolygon} className="gap-2">
+                      <Plus className="w-4 h-4" />
+                      Complete
+                    </Button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Color</Label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {PRESET_COLORS.map((color) => (
+                      <button
+                        key={color}
+                        onClick={() => setSelectedColor(color)}
+                        className={`w-10 h-10 rounded-md border-2 transition-all ${
+                          selectedColor === color ? "border-foreground scale-110" : "border-border"
+                        }`}
+                        style={{ backgroundColor: color }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Scale Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Scale Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="scale">Scale Factor</Label>
+                  <Input
+                    id="scale"
+                    type="number"
+                    step="0.01"
+                    value={scale}
+                    onChange={(e) => setScale(parseFloat(e.target.value) || 1)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="unit">Unit</Label>
+                  <Input
+                    id="unit"
+                    value={scaleUnit}
+                    onChange={(e) => setScaleUnit(e.target.value)}
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    updateProjectMutation.mutate({
+                      id: projectId,
+                      scale: scale.toString(),
+                      scaleUnit,
+                    })
+                  }
+                  className="w-full"
+                >
+                  Save Scale
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Measurements List */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Measurements</CardTitle>
+                <CardDescription>
+                  {measurements?.length || 0} measurement{measurements?.length === 1 ? "" : "s"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {measurementsLoading ? (
+                  <div className="flex justify-center py-4">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                  </div>
+                ) : measurements?.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No measurements yet
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {measurements?.map((measurement) => (
+                      <div
+                        key={measurement.id}
+                        className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 flex-1">
+                          <div
+                            className="w-4 h-4 rounded"
+                            style={{ backgroundColor: measurement.color }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{measurement.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {measurement.area} {scaleUnit}²
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm("Delete this measurement?")) {
+                              deleteMeasurementMutation.mutate({ id: measurement.id });
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full min-h-24 p-2 text-sm border border-input rounded-md bg-background resize-none"
+                  placeholder="Add notes about this project..."
+                />
+                <Button
+                  size="sm"
+                  onClick={() => updateProjectMutation.mutate({ id: projectId, notes })}
+                  className="w-full"
+                >
+                  Save Notes
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      {/* Name Dialog */}
+      <Dialog open={isNameDialogOpen} onOpenChange={setIsNameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Name This Measurement</DialogTitle>
+            <DialogDescription>
+              Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="measurement-name">Measurement Name</Label>
+            <Input
+              id="measurement-name"
+              value={measurementName}
+              onChange={(e) => setMeasurementName(e.target.value)}
+              placeholder="e.g., North Wing"
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsNameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending}>
+              {createMeasurementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

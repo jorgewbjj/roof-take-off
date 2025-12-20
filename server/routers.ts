@@ -1,10 +1,13 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import * as db from "./db";
+import { storagePut } from "./storage";
+import { nanoid } from "nanoid";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -17,12 +20,104 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  projects: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserProjects(ctx.user.id);
+    }),
+
+    get: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getProjectById(input.id, ctx.user.id);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1),
+        pdfFile: z.object({
+          data: z.string(), // base64 encoded
+          filename: z.string(),
+          mimeType: z.string(),
+        }),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Upload PDF to S3
+        const buffer = Buffer.from(input.pdfFile.data, 'base64');
+        const fileKey = `${ctx.user.id}/pdfs/${nanoid()}-${input.pdfFile.filename}`;
+        const { url } = await storagePut(fileKey, buffer, input.pdfFile.mimeType);
+
+        // Create project in database
+        const projectId = await db.createProject({
+          userId: ctx.user.id,
+          name: input.name,
+          pdfUrl: url,
+          pdfKey: fileKey,
+        });
+
+        return { id: projectId, url };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        scale: z.string().optional(),
+        scaleUnit: z.string().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...updates } = input;
+        await db.updateProject(id, ctx.user.id, updates);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteProject(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
+
+  measurements: router({
+    list: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ input }) => {
+        return db.getProjectMeasurements(input.projectId);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        name: z.string().min(1),
+        color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
+        area: z.string(),
+        coordinates: z.array(z.object({ x: z.number(), y: z.number() })),
+      }))
+      .mutation(async ({ input }) => {
+        const measurementId = await db.createMeasurement(input);
+        return { id: measurementId };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...updates } = input;
+        await db.updateMeasurement(id, updates);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteMeasurement(input.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
