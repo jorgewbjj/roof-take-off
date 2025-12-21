@@ -75,3 +75,15 @@
 - [x] Escape key to complete drawing (close shape)
 - [x] Visual snap indicator when near existing points
 - [x] Filter area totals by color/tag
+
+## New Features - Phase 3
+- [x] Exact measurement input - type distance to create line of specific length
+- [x] Input field for exact distance entry
+- [x] Visual preview of exact-length line following cursor
+- [x] Click to place exact-length line at desired angle
+- [x] Measurement editing mode - select and modify existing measurements
+- [x] Click to select measurement polygons
+- [x] Drag vertices to adjust measurement shape
+- [x] Delete key to remove selected measurements
+- [x] Visual selection indicator (highlight selected measurement)
+- [x] Delete button for selected measurements

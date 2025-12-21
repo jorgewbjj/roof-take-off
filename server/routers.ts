@@ -104,6 +104,8 @@ export const appRouter = router({
         id: z.number(),
         name: z.string().min(1).optional(),
         color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        area: z.string().optional(),
+        coordinates: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
       }))
       .mutation(async ({ input }) => {
         const { id, ...updates } = input;

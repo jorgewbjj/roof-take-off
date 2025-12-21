@@ -53,6 +53,11 @@ export default function MeasurementCanvas() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [selectedMeasurementId, setSelectedMeasurementId] = useState<number | null>(null);
+  const [draggingVertexIndex, setDraggingVertexIndex] = useState<number | null>(null);
+  const [exactDistance, setExactDistance] = useState("");
+  const [isExactMode, setIsExactMode] = useState(false);
   const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
@@ -77,10 +82,19 @@ export default function MeasurementCanvas() {
     },
   });
 
+  const updateMeasurementMutation = trpc.measurements.update.useMutation({
+    onSuccess: () => {
+      utils.measurements.list.invalidate({ projectId });
+      toast.success("Measurement updated");
+      redrawOverlay();
+    },
+  });
+
   const deleteMeasurementMutation = trpc.measurements.delete.useMutation({
     onSuccess: () => {
       utils.measurements.list.invalidate({ projectId });
       toast.success("Measurement deleted");
+      setSelectedMeasurementId(null);
       redrawOverlay();
     },
   });
@@ -154,11 +168,20 @@ export default function MeasurementCanvas() {
         e.preventDefault();
         setIsNameDialogOpen(true);
       }
+      
+      // Delete key to remove selected measurement
+      if (e.key === 'Delete' && isEditMode && selectedMeasurementId) {
+        e.preventDefault();
+        if (confirm('Delete this measurement?')) {
+          deleteMeasurementMutation.mutate({ id: selectedMeasurementId });
+          setSelectedMeasurementId(null);
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, currentPolygon]);
+  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId]);
 
   // Calculate distance between two points in pixels, then convert to feet
   const calculateDistance = (p1: Point, p2: Point): number => {
@@ -187,9 +210,11 @@ export default function MeasurementCanvas() {
         y: p.y * zoomLevel
       }));
 
-      ctx.fillStyle = measurement.color + "40";
-      ctx.strokeStyle = measurement.color;
-      ctx.lineWidth = 2;
+      const isSelected = isEditMode && selectedMeasurementId === measurement.id;
+
+      ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
+      ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
+      ctx.lineWidth = isSelected ? 4 : 2;
 
       ctx.beginPath();
       ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
@@ -197,6 +222,19 @@ export default function MeasurementCanvas() {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+
+      // Draw vertices for selected measurement
+      if (isSelected) {
+        scaledCoords.forEach((point, index) => {
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+          ctx.fillStyle = "#22c55e";
+          ctx.fill();
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        });
+      }
 
       // Draw label with area
       const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
@@ -347,7 +385,7 @@ export default function MeasurementCanvas() {
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex]);
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -370,14 +408,34 @@ export default function MeasurementCanvas() {
     setZoomLevel(prev => Math.max(0.5, Math.min(4.0, prev + delta)));
   };
 
-  // Handle mouse down for panning or drawing
+  // Handle mouse down for panning, drawing, or vertex dragging
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = overlayCanvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    if (!isDrawing) {
+    // Edit mode: check if clicking on a vertex
+    if (isEditMode && selectedMeasurementId && measurements) {
+      const selectedMeasurement = measurements.find(m => m.id === selectedMeasurementId);
+      if (selectedMeasurement) {
+        const coords = selectedMeasurement.coordinates as Point[];
+        const scaledCoords = coords.map(p => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
+        
+        // Check if clicking near any vertex
+        for (let i = 0; i < scaledCoords.length; i++) {
+          const distance = Math.sqrt(
+            Math.pow(x - scaledCoords[i].x, 2) + Math.pow(y - scaledCoords[i].y, 2)
+          );
+          if (distance < 10) {
+            setDraggingVertexIndex(i);
+            return;
+          }
+        }
+      }
+    }
+
+    if (!isDrawing && !isEditMode) {
       // Start panning mode
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
@@ -387,8 +445,37 @@ export default function MeasurementCanvas() {
 
   // Handle mouse up
   const handleMouseUp = () => {
+    if (draggingVertexIndex !== null && selectedMeasurementId && measurements) {
+      // Save the updated measurement
+      const selectedMeasurement = measurements.find(m => m.id === selectedMeasurementId);
+      if (selectedMeasurement) {
+        const coords = selectedMeasurement.coordinates as Point[];
+        const area = calculateArea(coords);
+        updateMeasurementMutation.mutate({
+          id: selectedMeasurementId,
+          area: area.toFixed(2),
+          coordinates: coords,
+        });
+      }
+    }
+    
     setIsPanning(false);
     setPanStart(null);
+    setDraggingVertexIndex(null);
+  };
+
+  // Check if point is inside polygon using ray casting algorithm
+  const isPointInPolygon = (point: Point, polygon: Point[]): boolean => {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x, yi = polygon[i].y;
+      const xj = polygon[j].x, yj = polygon[j].y;
+      
+      const intersect = ((yi > point.y) !== (yj > point.y))
+        && (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
   };
 
   // Find nearest snap point from existing measurements
@@ -413,14 +500,34 @@ export default function MeasurementCanvas() {
     return null;
   };
 
-  // Handle canvas click for drawing
+  // Handle canvas click for drawing and editing
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || isPanning) return;
-
     const canvas = overlayCanvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // Edit mode: select measurement
+    if (isEditMode && !isPanning) {
+      const normalizedX = x / zoomLevel;
+      const normalizedY = y / zoomLevel;
+      
+      // Check if clicking on any measurement
+      if (measurements) {
+        for (const measurement of measurements) {
+          const coords = measurement.coordinates as Point[];
+          // Check if point is inside polygon
+          if (isPointInPolygon({ x: normalizedX, y: normalizedY }, coords)) {
+            setSelectedMeasurementId(measurement.id);
+            return;
+          }
+        }
+      }
+      setSelectedMeasurementId(null);
+      return;
+    }
+
+    if (!isDrawing || isPanning) return;
 
     // Check if clicking near the first point to auto-close shape
     if (currentPolygon.length >= 3) {
@@ -435,6 +542,23 @@ export default function MeasurementCanvas() {
         setIsNameDialogOpen(true);
         return;
       }
+    }
+
+    // Exact measurement mode: create line of specific length
+    if (isExactMode && exactDistance && currentPolygon.length === 1) {
+      const startPoint = currentPolygon[0];
+      const startScaled = { x: startPoint.x * zoomLevel, y: startPoint.y * zoomLevel };
+      
+      // Calculate angle from start point to cursor
+      const angle = Math.atan2(y - startScaled.y, x - startScaled.x);
+      
+      // Calculate end point at exact distance
+      const distanceInPixels = parseFloat(exactDistance) / scale;
+      const endX = startPoint.x + (distanceInPixels * Math.cos(angle));
+      const endY = startPoint.y + (distanceInPixels * Math.sin(angle));
+      
+      setCurrentPolygon([...currentPolygon, { x: endX, y: endY }]);
+      return;
     }
 
     // Check for snap to existing measurement points
@@ -600,11 +724,25 @@ export default function MeasurementCanvas() {
               onMouseUp={handleMouseUp}
               onWheel={handleWheel}
               onMouseMove={(e) => {
+                const canvas = overlayCanvasRef.current!;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                // Vertex dragging in edit mode
+                if (draggingVertexIndex !== null && selectedMeasurementId && measurements) {
+                  const selectedMeasurement = measurements.find(m => m.id === selectedMeasurementId);
+                  if (selectedMeasurement) {
+                    const coords = [...(selectedMeasurement.coordinates as Point[])];
+                    coords[draggingVertexIndex] = { x: x / zoomLevel, y: y / zoomLevel };
+                    // Update the measurement in the local state for real-time feedback
+                    selectedMeasurement.coordinates = coords;
+                    redrawOverlay();
+                  }
+                  return;
+                }
+
                 if (isDrawing) {
-                  const canvas = overlayCanvasRef.current!;
-                  const rect = canvas.getBoundingClientRect();
-                  const x = e.clientX - rect.left;
-                  const y = e.clientY - rect.top;
                   setCursorPosition({ x, y });
                 } else if (isPanning && panStart) {
                   // Pan the canvas
@@ -637,24 +775,66 @@ export default function MeasurementCanvas() {
                 <CardTitle className="text-base">Drawing Tools</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     variant={isDrawing ? "default" : "outline"}
                     onClick={() => {
                       setIsDrawing(!isDrawing);
+                      setIsEditMode(false);
+                      setIsExactMode(false);
                       if (isDrawing) setCurrentPolygon([]);
                     }}
-                    className="flex-1"
                   >
                     {isDrawing ? "Stop Drawing" : "Start Drawing"}
                   </Button>
-                  {isDrawing && currentPolygon.length >= 3 && (
-                    <Button onClick={completePolygon} className="gap-2">
-                      <Plus className="w-4 h-4" />
-                      Complete
-                    </Button>
-                  )}
+                  <Button
+                    variant={isEditMode ? "default" : "outline"}
+                    onClick={() => {
+                      setIsEditMode(!isEditMode);
+                      setIsDrawing(false);
+                      setIsExactMode(false);
+                      setSelectedMeasurementId(null);
+                    }}
+                  >
+                    {isEditMode ? "Stop Editing" : "Edit Mode"}
+                  </Button>
                 </div>
+                {isDrawing && currentPolygon.length >= 3 && (
+                  <Button onClick={completePolygon} className="w-full gap-2">
+                    <Plus className="w-4 h-4" />
+                    Complete Shape
+                  </Button>
+                )}
+
+                {/* Exact Measurement Input */}
+                {isDrawing && (
+                  <div className="space-y-2 p-3 bg-accent/30 rounded-lg border border-border">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Exact Distance Mode</Label>
+                      <Button
+                        variant={isExactMode ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setIsExactMode(!isExactMode)}
+                      >
+                        {isExactMode ? "On" : "Off"}
+                      </Button>
+                    </div>
+                    {isExactMode && (
+                      <div className="space-y-1">
+                        <Input
+                          type="number"
+                          placeholder="Enter distance"
+                          value={exactDistance}
+                          onChange={(e) => setExactDistance(e.target.value)}
+                          className="h-8"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Type distance, then click to place line at desired angle
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Color</Label>
