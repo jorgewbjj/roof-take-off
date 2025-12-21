@@ -52,6 +52,7 @@ export default function MeasurementCanvas() {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
+  const [isMouseDown, setIsMouseDown] = useState(false);
   const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
@@ -198,23 +199,29 @@ export default function MeasurementCanvas() {
 
     // Draw current polygon with AutoCAD-style lines and measurements
     if (currentPolygon.length > 0) {
+      // Scale current polygon points with zoom level
+      const scaledPolygon = currentPolygon.map(p => ({
+        x: p.x * zoomLevel,
+        y: p.y * zoomLevel
+      }));
+
       // Draw lines between points
       ctx.strokeStyle = selectedColor;
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
 
-      for (let i = 0; i < currentPolygon.length; i++) {
-        const p1 = currentPolygon[i];
-        const p2 = currentPolygon[(i + 1) % currentPolygon.length];
+      for (let i = 0; i < scaledPolygon.length; i++) {
+        const p1 = scaledPolygon[i];
+        const p2 = scaledPolygon[(i + 1) % scaledPolygon.length];
         
-        if (i < currentPolygon.length - 1 || currentPolygon.length >= 3) {
+        if (i < scaledPolygon.length - 1 || scaledPolygon.length >= 3) {
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
 
           // Draw distance label on each line
-          if (i < currentPolygon.length - 1) {
+          if (i < scaledPolygon.length - 1) {
             const distance = calculateDistance(p1, p2);
             const midX = (p1.x + p2.x) / 2;
             const midY = (p1.y + p2.y) / 2;
@@ -231,8 +238,8 @@ export default function MeasurementCanvas() {
       }
 
       // Draw preview line from last point to cursor
-      if (cursorPosition && currentPolygon.length > 0) {
-        const lastPoint = currentPolygon[currentPolygon.length - 1];
+      if (cursorPosition && scaledPolygon.length > 0) {
+        const lastPoint = scaledPolygon[scaledPolygon.length - 1];
         ctx.strokeStyle = selectedColor;
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
@@ -256,7 +263,7 @@ export default function MeasurementCanvas() {
       }
 
       // Draw points
-      currentPolygon.forEach((point, index) => {
+      scaledPolygon.forEach((point, index) => {
         ctx.beginPath();
         ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
         ctx.fillStyle = "#fff";
@@ -267,10 +274,10 @@ export default function MeasurementCanvas() {
       });
 
       // Show area preview if shape can be closed
-      if (currentPolygon.length >= 3) {
+      if (scaledPolygon.length >= 3) {
         const area = calculateArea(currentPolygon);
-        const centerX = currentPolygon.reduce((sum, p) => sum + p.x, 0) / currentPolygon.length;
-        const centerY = currentPolygon.reduce((sum, p) => sum + p.y, 0) / currentPolygon.length;
+        const centerX = scaledPolygon.reduce((sum, p) => sum + p.x, 0) / scaledPolygon.length;
+        const centerY = scaledPolygon.reduce((sum, p) => sum + p.y, 0) / scaledPolygon.length;
         
         ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
         ctx.fillRect(centerX - 50, centerY - 15, 100, 30);
@@ -284,7 +291,7 @@ export default function MeasurementCanvas() {
 
     // Draw crosshair cursor
     if (isDrawing && cursorPosition) {
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       
@@ -313,11 +320,11 @@ export default function MeasurementCanvas() {
 
   // Zoom controls
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 0.25, 4.0));
+    setZoomLevel(prev => Math.min(prev + 0.1, 4.0));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
+    setZoomLevel(prev => Math.max(prev - 0.1, 0.5));
   };
 
   const handleZoomReset = () => {
@@ -332,16 +339,56 @@ export default function MeasurementCanvas() {
     setZoomLevel(prev => Math.max(0.5, Math.min(4.0, prev + delta)));
   };
 
-  // Handle canvas click
+  // Handle mouse down for panning or drawing
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = overlayCanvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (!isDrawing) {
+      // Start panning mode
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+  };
+
+  // Handle mouse up
+  const handleMouseUp = () => {
+    setIsPanning(false);
+    setPanStart(null);
+  };
+
+  // Handle canvas click for drawing
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || isPanning) return;
 
     const canvas = overlayCanvasRef.current!;
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    setCurrentPolygon([...currentPolygon, { x, y }]);
+    // Store coordinates normalized by zoom level so they stay in the same place
+    const normalizedX = x / zoomLevel;
+    const normalizedY = y / zoomLevel;
+
+    // Check if clicking near the first point to auto-close shape
+    if (currentPolygon.length >= 3) {
+      const firstPoint = currentPolygon[0];
+      const firstPointScaled = { x: firstPoint.x * zoomLevel, y: firstPoint.y * zoomLevel };
+      const distance = Math.sqrt(
+        Math.pow(x - firstPointScaled.x, 2) + Math.pow(y - firstPointScaled.y, 2)
+      );
+      
+      // If clicking within 15 pixels of first point, auto-close and save
+      if (distance < 15) {
+        setIsNameDialogOpen(true);
+        return;
+      }
+    }
+
+    setCurrentPolygon([...currentPolygon, { x: normalizedX, y: normalizedY }]);
   };
 
   // Complete polygon
@@ -484,20 +531,33 @@ export default function MeasurementCanvas() {
             <canvas
               ref={overlayCanvasRef}
               onClick={handleCanvasClick}
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
               onWheel={handleWheel}
               onMouseMove={(e) => {
-                if (!isDrawing) return;
-                const canvas = overlayCanvasRef.current!;
-                const rect = canvas.getBoundingClientRect();
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                setCursorPosition({ x, y });
+                if (isDrawing) {
+                  const canvas = overlayCanvasRef.current!;
+                  const rect = canvas.getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  const y = e.clientY - rect.top;
+                  setCursorPosition({ x, y });
+                } else if (isPanning && panStart) {
+                  // Pan the canvas
+                  const dx = e.clientX - panStart.x;
+                  const dy = e.clientY - panStart.y;
+                  setPanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+                  setPanStart({ x: e.clientX, y: e.clientY });
+                }
               }}
-              onMouseLeave={() => setCursorPosition(null)}
+              onMouseLeave={() => {
+                setCursorPosition(null);
+                setIsPanning(false);
+                setPanStart(null);
+              }}
               className="absolute top-0 left-0"
               style={{ 
                 pointerEvents: "auto",
-                cursor: isDrawing ? "none" : "default"
+                cursor: isDrawing ? "none" : (isPanning ? "grabbing" : "grab")
               }}
             />
           </div>

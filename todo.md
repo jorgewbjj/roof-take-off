@@ -55,3 +55,13 @@
 - [x] Fix measurement overlay to scale with zoom level
 - [x] Ensure marked areas stay aligned with PDF when zooming
 - [x] Update coordinate system to account for zoom transformations
+
+## Critical Bug Fixes
+- [x] Fix measurement position bug - areas move to different place when completed
+- [x] Store coordinates in normalized format (independent of zoom level)
+
+## UI Improvements
+- [x] Change crosshair cursor color to black
+- [x] Auto-save shape when closed and prompt for name immediately
+- [x] Implement left-click panning to move PDF around
+- [x] Make zoom smoother with smaller increments (0.1 instead of 0.25)
