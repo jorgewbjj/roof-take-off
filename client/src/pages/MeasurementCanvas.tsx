@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -48,6 +48,10 @@ export default function MeasurementCanvas() {
   const [newProjectName, setNewProjectName] = useState("");
   const [notes, setNotes] = useState("");
   const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(1.0);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState<Point | null>(null);
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -107,7 +111,7 @@ export default function MeasurementCanvas() {
     loadPdf();
   }, [project]);
 
-  // Render PDF page
+  // Render PDF page with high quality
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) return;
 
@@ -116,7 +120,11 @@ export default function MeasurementCanvas() {
       const canvas = canvasRef.current!;
       const context = canvas.getContext("2d")!;
 
-      const viewport = page.getViewport({ scale: 1.5 });
+      // High quality rendering: base scale 2.5 for crisp text, multiplied by zoom level
+      const baseScale = 2.5;
+      const viewport = page.getViewport({ scale: baseScale * zoomLevel });
+      
+      // Set canvas size to match viewport
       canvas.width = viewport.width;
       canvas.height = viewport.height;
 
@@ -125,12 +133,16 @@ export default function MeasurementCanvas() {
         overlayCanvasRef.current.height = viewport.height;
       }
 
+      // Enable image smoothing for better quality
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+
       await page.render({ canvasContext: context, viewport, canvas }).promise;
       redrawOverlay();
     };
 
     renderPage();
-  }, [pdfDoc, currentPage]);
+  }, [pdfDoc, currentPage, zoomLevel]);
 
   // Calculate distance between two points in pixels, then convert to feet
   const calculateDistance = (p1: Point, p2: Point): number => {
@@ -292,6 +304,27 @@ export default function MeasurementCanvas() {
     redrawOverlay();
   }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit]);
 
+  // Zoom controls
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.25, 4.0));
+  };
+
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
+  };
+
+  const handleZoomReset = () => {
+    setZoomLevel(1.0);
+    setPanOffset({ x: 0, y: 0 });
+  };
+
+  // Handle mouse wheel zoom
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setZoomLevel(prev => Math.max(0.5, Math.min(4.0, prev + delta)));
+  };
+
   // Handle canvas click
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing) return;
@@ -444,6 +477,7 @@ export default function MeasurementCanvas() {
             <canvas
               ref={overlayCanvasRef}
               onClick={handleCanvasClick}
+              onWheel={handleWheel}
               onMouseMove={(e) => {
                 if (!isDrawing) return;
                 const canvas = overlayCanvasRef.current!;
@@ -455,7 +489,7 @@ export default function MeasurementCanvas() {
               onMouseLeave={() => setCursorPosition(null)}
               className="absolute top-0 left-0"
               style={{ 
-                pointerEvents: isDrawing ? "auto" : "none",
+                pointerEvents: "auto",
                 cursor: isDrawing ? "none" : "default"
               }}
             />
@@ -505,6 +539,52 @@ export default function MeasurementCanvas() {
                     ))}
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Zoom Controls */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Zoom Controls</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleZoomOut}
+                    disabled={zoomLevel <= 0.5}
+                    className="flex-1 gap-1"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                    Out
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleZoomReset}
+                    className="flex-1 gap-1"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Reset
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleZoomIn}
+                    disabled={zoomLevel >= 4.0}
+                    className="flex-1 gap-1"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                    In
+                  </Button>
+                </div>
+                <div className="text-center text-sm text-muted-foreground">
+                  Zoom: {(zoomLevel * 100).toFixed(0)}%
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use mouse wheel to zoom in/out
+                </p>
               </CardContent>
             </Card>
 

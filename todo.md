@@ -43,3 +43,10 @@
 - [x] Display area in square feet automatically when closing a shape
 - [x] Real-time preview line from last point to cursor position
 - [x] Add visual feedback for line measurements during drawing
+
+## New Features
+- [x] High-quality PDF rendering with increased resolution
+- [x] Zoom in/out controls for better precision
+- [x] Mouse wheel zoom support
+- [x] Zoom level indicator
+- [ ] Pan functionality when zoomed in
