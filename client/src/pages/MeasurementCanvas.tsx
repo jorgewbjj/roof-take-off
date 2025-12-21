@@ -52,6 +52,7 @@ export default function MeasurementCanvas() {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
+  const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -160,25 +161,31 @@ export default function MeasurementCanvas() {
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw saved measurements
+    // Draw saved measurements (scale coordinates with zoom level)
     measurements?.forEach((measurement) => {
       const coords = measurement.coordinates as Point[];
       if (coords.length < 3) return;
+
+      // Scale coordinates with zoom level
+      const scaledCoords = coords.map(p => ({
+        x: p.x * zoomLevel,
+        y: p.y * zoomLevel
+      }));
 
       ctx.fillStyle = measurement.color + "40";
       ctx.strokeStyle = measurement.color;
       ctx.lineWidth = 2;
 
       ctx.beginPath();
-      ctx.moveTo(coords[0].x, coords[0].y);
-      coords.forEach((point) => ctx.lineTo(point.x, point.y));
+      ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
+      scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
       // Draw label with area
-      const centerX = coords.reduce((sum, p) => sum + p.x, 0) / coords.length;
-      const centerY = coords.reduce((sum, p) => sum + p.y, 0) / coords.length;
+      const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
+      const centerY = scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length;
       ctx.fillStyle = "#000";
       ctx.fillRect(centerX - 60, centerY - 25, 120, 40);
       ctx.fillStyle = "#fff";
@@ -302,7 +309,7 @@ export default function MeasurementCanvas() {
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel]);
 
   // Zoom controls
   const handleZoomIn = () => {

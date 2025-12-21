@@ -50,3 +50,8 @@
 - [x] Mouse wheel zoom support
 - [x] Zoom level indicator
 - [ ] Pan functionality when zoomed in
+
+## Bug Fixes - Zoom Alignment
+- [x] Fix measurement overlay to scale with zoom level
+- [x] Ensure marked areas stay aligned with PDF when zooming
+- [x] Update coordinate system to account for zoom transformations
