@@ -146,6 +146,20 @@ export default function MeasurementCanvas() {
     renderPage();
   }, [pdfDoc, currentPage, zoomLevel]);
 
+  // Add keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape key to complete drawing
+      if (e.key === 'Escape' && isDrawing && currentPolygon.length >= 3) {
+        e.preventDefault();
+        setIsNameDialogOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isDrawing, currentPolygon]);
+
   // Calculate distance between two points in pixels, then convert to feet
   const calculateDistance = (p1: Point, p2: Point): number => {
     const dx = p2.x - p1.x;
@@ -291,7 +305,11 @@ export default function MeasurementCanvas() {
 
     // Draw crosshair cursor
     if (isDrawing && cursorPosition) {
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
+      // Check if cursor is near a snap point
+      const snapPoint = findSnapPoint(cursorPosition.x, cursorPosition.y);
+      const isNearSnapPoint = snapPoint !== null;
+
+      ctx.strokeStyle = isNearSnapPoint ? "rgba(34, 197, 94, 0.9)" : "rgba(0, 0, 0, 0.8)";
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       
@@ -307,10 +325,23 @@ export default function MeasurementCanvas() {
       ctx.lineTo(cursorPosition.x, canvas.height);
       ctx.stroke();
       
-      // Center circle
+      // Center circle - larger and highlighted when near snap point
       ctx.beginPath();
-      ctx.arc(cursorPosition.x, cursorPosition.y, 8, 0, Math.PI * 2);
+      ctx.arc(cursorPosition.x, cursorPosition.y, isNearSnapPoint ? 12 : 8, 0, Math.PI * 2);
+      ctx.lineWidth = isNearSnapPoint ? 2 : 1;
       ctx.stroke();
+
+      // Draw snap indicator
+      if (isNearSnapPoint && snapPoint) {
+        const scaledSnapPoint = { x: snapPoint.x * zoomLevel, y: snapPoint.y * zoomLevel };
+        ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
+        ctx.fillStyle = "rgba(34, 197, 94, 0.3)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(scaledSnapPoint.x, scaledSnapPoint.y, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
     }
   };
 
@@ -360,6 +391,28 @@ export default function MeasurementCanvas() {
     setPanStart(null);
   };
 
+  // Find nearest snap point from existing measurements
+  const findSnapPoint = (x: number, y: number, snapDistance: number = 15): Point | null => {
+    if (!measurements) return null;
+    
+    // Check all existing measurement vertices
+    for (const measurement of measurements) {
+      const coords = measurement.coordinates as Point[];
+      for (const point of coords) {
+        const scaledPoint = { x: point.x * zoomLevel, y: point.y * zoomLevel };
+        const distance = Math.sqrt(
+          Math.pow(x - scaledPoint.x, 2) + Math.pow(y - scaledPoint.y, 2)
+        );
+        
+        if (distance < snapDistance) {
+          return point; // Return normalized point
+        }
+      }
+    }
+    
+    return null;
+  };
+
   // Handle canvas click for drawing
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || isPanning) return;
@@ -368,10 +421,6 @@ export default function MeasurementCanvas() {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
-    // Store coordinates normalized by zoom level so they stay in the same place
-    const normalizedX = x / zoomLevel;
-    const normalizedY = y / zoomLevel;
 
     // Check if clicking near the first point to auto-close shape
     if (currentPolygon.length >= 3) {
@@ -388,6 +437,16 @@ export default function MeasurementCanvas() {
       }
     }
 
+    // Check for snap to existing measurement points
+    const snapPoint = findSnapPoint(x, y);
+    if (snapPoint) {
+      setCurrentPolygon([...currentPolygon, snapPoint]);
+      return;
+    }
+
+    // Store coordinates normalized by zoom level so they stay in the same place
+    const normalizedX = x / zoomLevel;
+    const normalizedY = y / zoomLevel;
     setCurrentPolygon([...currentPolygon, { x: normalizedX, y: normalizedY }]);
   };
 
@@ -526,7 +585,13 @@ export default function MeasurementCanvas() {
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas Area */}
         <div className="flex-1 overflow-auto p-6" ref={containerRef}>
-          <div className="relative inline-block">
+          <div 
+            className="relative inline-block"
+            style={{
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
+              transition: isPanning ? 'none' : 'transform 0.1s ease-out'
+            }}
+          >
             <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg" />
             <canvas
               ref={overlayCanvasRef}
@@ -692,6 +757,47 @@ export default function MeasurementCanvas() {
                 >
                   Save Scale
                 </Button>
+              </CardContent>
+            </Card>
+
+            {/* Area Totals Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Area Summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {measurements && measurements.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center p-3 rounded-lg bg-primary/10 border border-primary/20">
+                      <span className="font-semibold text-sm">Total Area</span>
+                      <span className="font-bold text-lg text-primary">
+                        {measurements.reduce((sum, m) => sum + parseFloat(m.area), 0).toFixed(2)} {scaleUnit}²
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">By Color:</p>
+                      {Object.entries(
+                        measurements.reduce((acc, m) => {
+                          const color = m.color;
+                          acc[color] = (acc[color] || 0) + parseFloat(m.area);
+                          return acc;
+                        }, {} as Record<string, number>)
+                      ).map(([color, area]) => (
+                        <div key={color} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded" style={{ backgroundColor: color }} />
+                            <span className="text-muted-foreground">Subtotal</span>
+                          </div>
+                          <span className="font-medium">{area.toFixed(2)} {scaleUnit}²</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No measurements yet
+                  </p>
+                )}
               </CardContent>
             </Card>
 

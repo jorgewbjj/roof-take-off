@@ -65,3 +65,13 @@
 - [x] Auto-save shape when closed and prompt for name immediately
 - [x] Implement left-click panning to move PDF around
 - [x] Make zoom smoother with smaller increments (0.1 instead of 0.25)
+
+## New Bug Fixes
+- [x] Fix PDF panning - not working properly
+
+## New Features - Phase 2
+- [x] Measurement snapping - auto-align to existing measurement vertices
+- [x] Area totals summary panel showing total measured area
+- [x] Escape key to complete drawing (close shape)
+- [x] Visual snap indicator when near existing points
+- [x] Filter area totals by color/tag
