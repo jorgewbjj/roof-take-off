@@ -3,10 +3,17 @@ import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
 import { Ruler, Upload, Palette, Save, ArrowRight } from "lucide-react";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 
 export default function Home() {
   const { isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      setLocation("/projects");
+    }
+  }, [isAuthenticated, loading, setLocation]);
 
   if (loading) {
     return (
@@ -17,7 +24,6 @@ export default function Home() {
   }
 
   if (isAuthenticated) {
-    setLocation("/projects");
     return null;
   }
 

@@ -34,11 +34,23 @@ async function buildDownloadUrl(
     ensureTrailingSlash(baseUrl)
   );
   downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
+  console.log('[buildDownloadUrl] Requesting URL:', downloadApiUrl.toString());
+  console.log('[buildDownloadUrl] For key:', relKey);
+  
   const response = await fetch(downloadApiUrl, {
     method: "GET",
     headers: buildAuthHeaders(apiKey),
   });
-  return (await response.json()).url;
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[buildDownloadUrl] Error response:', response.status, errorText);
+    throw new Error(`Failed to get download URL: ${response.status} ${errorText}`);
+  }
+  
+  const result = await response.json();
+  console.log('[buildDownloadUrl] Got URL:', result.url);
+  return result.url;
 }
 
 function ensureTrailingSlash(value: string): string {

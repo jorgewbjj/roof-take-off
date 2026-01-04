@@ -31,6 +31,24 @@ export const appRouter = router({
         return db.getProjectById(input.id, ctx.user.id);
       }),
 
+    getPdfUrl: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.id, ctx.user.id);
+        if (!project) throw new Error('Project not found');
+        
+        console.log('[getPdfUrl] Project pdfKey:', project.pdfKey);
+        console.log('[getPdfUrl] Project pdfUrl:', project.pdfUrl);
+        
+        // Generate fresh presigned URL using storage proxy
+        const { storageGet } = await import('./storage');
+        const { url } = await storageGet(project.pdfKey);
+        
+        console.log('[getPdfUrl] Presigned URL from storageGet:', url);
+        
+        return { url };
+      }),
+
     create: protectedProcedure
       .input(z.object({
         name: z.string().min(1),

@@ -110,6 +110,12 @@ export default function MeasurementCanvas() {
           url: project.pdfUrl,
           withCredentials: false,
           isEvalSupported: false,
+          httpHeaders: {
+            'Accept': 'application/pdf',
+          },
+          // Use fetch with CORS mode
+          useSystemFonts: true,
+          standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/',
         });
         const pdf = await loadingTask.promise;
         console.log("PDF loaded successfully, pages:", pdf.numPages);
@@ -120,7 +126,11 @@ export default function MeasurementCanvas() {
         setNewProjectName(project.name);
       } catch (error) {
         console.error("Error loading PDF:", error);
-        toast.error(`Failed to load PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        toast.error(
+          `Unable to load PDF. The file may have expired or been moved. Please try uploading the PDF again.`,
+          { duration: 10000 }
+        );
       }
     };
 

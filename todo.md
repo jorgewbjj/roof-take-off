@@ -87,3 +87,10 @@
 - [x] Delete key to remove selected measurements
 - [x] Visual selection indicator (highlight selected measurement)
 - [x] Delete button for selected measurements
+
+## Bug Fixes - PDF Upload
+- [x] Investigated PDF 403 CORS error when loading from CloudFront
+- [x] Add proper CORS configuration to PDF.js worker
+- [x] Tested storage proxy presigned URLs (limitation found - returns same public URL)
+- [x] Improved error messaging for expired/inaccessible PDFs
+- [x] Documented that fresh PDF uploads work correctly
