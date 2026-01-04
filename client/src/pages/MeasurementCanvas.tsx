@@ -58,6 +58,10 @@ export default function MeasurementCanvas() {
   const [draggingVertexIndex, setDraggingVertexIndex] = useState<number | null>(null);
   const [exactDistance, setExactDistance] = useState("");
   const [isExactMode, setIsExactMode] = useState(false);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
+  const [calibrationDistance, setCalibrationDistance] = useState("");
+  const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
   const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
@@ -358,6 +362,56 @@ export default function MeasurementCanvas() {
       }
     }
 
+    // Draw calibration line
+    if (isCalibrating && calibrationPoints.length > 0) {
+      const scaledPoints = calibrationPoints.map(p => ({
+        x: p.x * zoomLevel,
+        y: p.y * zoomLevel
+      }));
+
+      // Draw points
+      scaledPoints.forEach(point => {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+        ctx.fillStyle = "#3b82f6";
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
+
+      // Draw line between points or to cursor
+      if (scaledPoints.length === 1 && cursorPosition) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+        ctx.lineTo(cursorPosition.x, cursorPosition.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Show distance
+        const distance = calculateDistance(scaledPoints[0], cursorPosition);
+        const midX = (scaledPoints[0].x + cursorPosition.x) / 2;
+        const midY = (scaledPoints[0].y + cursorPosition.y) / 2;
+        ctx.fillStyle = "rgba(59, 130, 246, 0.9)";
+        ctx.fillRect(midX - 40, midY - 15, 80, 25);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
+      } else if (scaledPoints.length === 2) {
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(scaledPoints[0].x, scaledPoints[0].y);
+        ctx.lineTo(scaledPoints[1].x, scaledPoints[1].y);
+        ctx.stroke();
+      }
+    }
+
     // Draw crosshair cursor
     if (isDrawing && cursorPosition) {
       // Check if cursor is near a snap point
@@ -402,7 +456,7 @@ export default function MeasurementCanvas() {
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints]);
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -523,6 +577,20 @@ export default function MeasurementCanvas() {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // Calibration mode: collect two points
+    if (isCalibrating) {
+      const normalizedX = x / zoomLevel;
+      const normalizedY = y / zoomLevel;
+      const newPoints = [...calibrationPoints, { x: normalizedX, y: normalizedY }];
+      setCalibrationPoints(newPoints);
+      
+      // After two points, open dialog to enter known distance
+      if (newPoints.length === 2) {
+        setIsCalibrationDialogOpen(true);
+      }
+      return;
+    }
 
     // Edit mode: select measurement
     if (isEditMode && !isPanning) {
@@ -955,6 +1023,34 @@ export default function MeasurementCanvas() {
                     <option value="in">Inches (in)</option>
                   </select>
                 </div>
+                <div className="space-y-2">
+                  <Button
+                    variant={isCalibrating ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      if (isCalibrating) {
+                        // Cancel calibration
+                        setIsCalibrating(false);
+                        setCalibrationPoints([]);
+                      } else {
+                        // Start calibration
+                        setIsCalibrating(true);
+                        setCalibrationPoints([]);
+                        setIsDrawing(false);
+                        setIsEditMode(false);
+                        setIsExactMode(false);
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    {isCalibrating ? "Cancel Calibration" : "Calibrate Scale"}
+                  </Button>
+                  {isCalibrating && (
+                    <p className="text-xs text-muted-foreground">
+                      Click two points on a known distance in the PDF
+                    </p>
+                  )}
+                </div>
                 <Button
                   size="sm"
                   onClick={() =>
@@ -1117,6 +1213,91 @@ export default function MeasurementCanvas() {
             <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending}>
               {createMeasurementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Calibration Dialog */}
+      <Dialog open={isCalibrationDialogOpen} onOpenChange={setIsCalibrationDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enter Known Distance</DialogTitle>
+            <DialogDescription>
+              Enter the actual distance between the two points you selected
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="calibration-distance">Known Distance</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="calibration-distance"
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={calibrationDistance}
+                  onChange={(e) => setCalibrationDistance(e.target.value)}
+                  placeholder="e.g., 20"
+                  className="flex-1"
+                />
+                <span className="text-sm font-medium">{scaleUnit}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Example: If the dimension line shows "20 ft", enter 20
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCalibrationDialogOpen(false);
+                setIsCalibrating(false);
+                setCalibrationPoints([]);
+                setCalibrationDistance("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (calibrationPoints.length === 2 && calibrationDistance) {
+                  // Calculate pixel distance between the two points
+                  const p1 = calibrationPoints[0];
+                  const p2 = calibrationPoints[1];
+                  const dx = p2.x - p1.x;
+                  const dy = p2.y - p1.y;
+                  const pixelDistance = Math.sqrt(dx * dx + dy * dy);
+                  
+                  // Convert pixel distance to inches (96 DPI)
+                  const inchDistance = pixelDistance / 96;
+                  
+                  // Calculate scale: known distance / inch distance
+                  const knownDistance = parseFloat(calibrationDistance);
+                  const newScale = knownDistance / inchDistance;
+                  
+                  setScale(newScale);
+                  
+                  // Save to database
+                  updateProjectMutation.mutate({
+                    id: projectId,
+                    scale: newScale.toString(),
+                    scaleUnit,
+                  });
+                  
+                  toast.success(`Scale calibrated: 1 inch = ${newScale.toFixed(2)} ${scaleUnit}`);
+                  
+                  // Reset calibration state
+                  setIsCalibrationDialogOpen(false);
+                  setIsCalibrating(false);
+                  setCalibrationPoints([]);
+                  setCalibrationDistance("");
+                }
+              }}
+              disabled={!calibrationDistance}
+            >
+              Apply Calibration
             </Button>
           </DialogFooter>
         </DialogContent>

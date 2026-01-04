@@ -101,3 +101,12 @@
 - [x] Update measurement calculations to use new scale format
 - [x] Database schema already supports this (no changes needed)
 - [x] Test measurements with new scale system
+
+## Scale Calibration Tool
+- [x] Add calibration mode button in Scale Settings
+- [x] Implement two-click point selection for known distance
+- [x] Show visual line between calibration points
+- [x] Add dialog to enter known distance
+- [x] Calculate and apply scale factor automatically
+- [x] Display calibration line distance during selection
+- [x] Add cancel calibration option
