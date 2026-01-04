@@ -193,12 +193,19 @@ export default function MeasurementCanvas() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId]);
 
-  // Calculate distance between two points in pixels, then convert to feet
-  const calculateDistance = (p1: Point, p2: Point): number => {
+  // Calculate real-world distance from pixel distance
+  // scale represents: 1 inch on PDF = scale feet in real world
+  const calculateDistance = (p1: Point, p2: Point) => {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const pixelDistance = Math.sqrt(dx * dx + dy * dy);
-    return pixelDistance * scale;
+    
+    // Convert pixel distance to inches (assuming 96 DPI standard)
+    const inchDistance = pixelDistance / 96;
+    
+    // Convert inches to real-world units using scale
+    // If scale = 20 and unit = ft, then 1 inch = 20 ft
+    return inchDistance * scale;
   };
 
   // Redraw overlay with measurements
@@ -914,25 +921,39 @@ export default function MeasurementCanvas() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Scale Settings</CardTitle>
+                <CardDescription className="text-xs">Set the drawing scale (e.g., 1 inch = 20 feet)</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="scale">Scale Factor</Label>
-                  <Input
-                    id="scale"
-                    type="number"
-                    step="0.01"
-                    value={scale}
-                    onChange={(e) => setScale(parseFloat(e.target.value) || 1)}
-                  />
+                  <Label htmlFor="scale" className="text-sm">1 inch =</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="scale"
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      value={scale}
+                      onChange={(e) => setScale(parseFloat(e.target.value) || 1)}
+                      className="flex-1"
+                    />
+                    <span className="text-sm font-medium">{scaleUnit}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Example: If 1 inch on PDF = 20 feet in reality, enter 20
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="unit">Unit</Label>
-                  <Input
+                  <Label htmlFor="unit" className="text-sm">Unit</Label>
+                  <select
                     id="unit"
                     value={scaleUnit}
                     onChange={(e) => setScaleUnit(e.target.value)}
-                  />
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="ft">Feet (ft)</option>
+                    <option value="m">Meters (m)</option>
+                    <option value="in">Inches (in)</option>
+                  </select>
                 </div>
                 <Button
                   size="sm"

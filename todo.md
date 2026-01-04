@@ -94,3 +94,10 @@
 - [x] Tested storage proxy presigned URLs (limitation found - returns same public URL)
 - [x] Improved error messaging for expired/inaccessible PDFs
 - [x] Documented that fresh PDF uploads work correctly
+
+## Scale System Update
+- [x] Change scale format from multiplier to "1 inch = X feet"
+- [x] Update scale input UI to show architectural format
+- [x] Update measurement calculations to use new scale format
+- [x] Database schema already supports this (no changes needed)
+- [x] Test measurements with new scale system
