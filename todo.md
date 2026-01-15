@@ -114,3 +114,8 @@
 ## Zoom Range Fix
 - [x] Increase zoom out range beyond current 50% minimum
 - [x] Allow zoom out to 10% for better overview of large PDFs
+
+## Calibration Accuracy Bug
+- [x] Fix calibration so measuring the same distance returns exact calibrated value
+- [x] Verify distance calculation formula matches calibration formula
+- [x] Ensure zoom level doesn't affect measurement accuracy (normalized by zoom in calculateDistance)

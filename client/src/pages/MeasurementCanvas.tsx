@@ -204,8 +204,11 @@ export default function MeasurementCanvas() {
     const dy = p2.y - p1.y;
     const pixelDistance = Math.sqrt(dx * dx + dy * dy);
     
+    // Normalize by zoom level to get base pixel distance
+    const normalizedPixelDistance = pixelDistance / zoomLevel;
+    
     // Convert pixel distance to inches (assuming 96 DPI standard)
-    const inchDistance = pixelDistance / 96;
+    const inchDistance = normalizedPixelDistance / 96;
     
     // Convert inches to real-world units using scale
     // If scale = 20 and unit = ft, then 1 inch = 20 ft
