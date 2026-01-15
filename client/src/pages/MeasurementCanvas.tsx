@@ -464,7 +464,7 @@ export default function MeasurementCanvas() {
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.1, 0.5));
+    setZoomLevel(prev => Math.max(prev - 0.1, 0.1));
   };
 
   const handleZoomReset = () => {
@@ -476,7 +476,7 @@ export default function MeasurementCanvas() {
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoomLevel(prev => Math.max(0.5, Math.min(4.0, prev + delta)));
+    setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
   };
 
   // Handle mouse down for panning, drawing, or vertex dragging
@@ -950,7 +950,7 @@ export default function MeasurementCanvas() {
                     variant="outline"
                     size="sm"
                     onClick={handleZoomOut}
-                    disabled={zoomLevel <= 0.5}
+                    disabled={zoomLevel <= 0.1}
                     className="flex-1 gap-1"
                   >
                     <ZoomOut className="w-4 h-4" />

@@ -110,3 +110,7 @@
 - [x] Calculate and apply scale factor automatically
 - [x] Display calibration line distance during selection
 - [x] Add cancel calibration option
+
+## Zoom Range Fix
+- [x] Increase zoom out range beyond current 50% minimum
+- [x] Allow zoom out to 10% for better overview of large PDFs
