@@ -121,6 +121,7 @@
 - [x] Ensure zoom level doesn't affect measurement accuracy (normalized by zoom in calculateDistance)
 
 ## Middle Mouse Button Panning
-- [x] Enable middle mouse button (scroll button) to pan the document
-- [x] Allow panning while in drawing mode without interfering with measurements
-- [x] Show grabbing cursor during middle mouse button panning
+- [x] Fix middle mouse button panning - not working when tested
+- [x] Debug why button 1 check isn't triggering (onClick was interfering)
+- [x] Added onAuxClick to prevent middle button from triggering onClick
+- [x] Filter onClick to only handle left button (button 0)

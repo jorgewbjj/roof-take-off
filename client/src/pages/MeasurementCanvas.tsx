@@ -815,7 +815,16 @@ export default function MeasurementCanvas() {
             <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg" />
             <canvas
               ref={overlayCanvasRef}
-              onClick={handleCanvasClick}
+              onClick={(e) => {
+                // Only handle left clicks for drawing/editing
+                if (e.button === 0) {
+                  handleCanvasClick(e);
+                }
+              }}
+              onAuxClick={(e) => {
+                // Prevent middle button from triggering onClick
+                e.preventDefault();
+              }}
               onMouseDown={handleMouseDown}
               onMouseUp={handleMouseUp}
               onWheel={handleWheel}
