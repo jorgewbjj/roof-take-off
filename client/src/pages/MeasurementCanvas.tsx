@@ -156,6 +156,35 @@ export default function MeasurementCanvas() {
     loadPdf();
   }, [project]);
 
+  // Auto-fit zoom when PDF first loads
+  useEffect(() => {
+    if (!pdfDoc || !containerRef.current) return;
+
+    const autoFit = async () => {
+      const page = await pdfDoc.getPage(currentPage);
+      const baseScale = 2.5;
+      
+      // Get PDF dimensions at base scale
+      const pdfViewport = page.getViewport({ scale: baseScale });
+      const pdfWidth = pdfViewport.width;
+      const pdfHeight = pdfViewport.height;
+      
+      // Get container dimensions (subtract padding)
+      const container = containerRef.current!;
+      const containerWidth = container.clientWidth - 48; // 24px padding on each side
+      const containerHeight = container.clientHeight - 48;
+      
+      // Calculate zoom to fit
+      const zoomToFitWidth = containerWidth / pdfWidth;
+      const zoomToFitHeight = containerHeight / pdfHeight;
+      const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight, 1); // Cap at 100%
+      
+      setZoomLevel(optimalZoom);
+    };
+
+    autoFit();
+  }, [pdfDoc]); // Only run when PDF loads
+
   // Render PDF page with high quality
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) return;
@@ -995,7 +1024,7 @@ export default function MeasurementCanvas() {
         </div>
 
         {/* Sidebar */}
-        <div className="w-80 border-l border-border bg-card overflow-y-auto">
+        <div className="w-80 border-l border-border bg-card overflow-y-auto flex-shrink-0">
           <div className="p-6 space-y-6">
             {/* Drawing Tools */}
             <Card>

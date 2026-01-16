@@ -209,3 +209,8 @@
 - [x] Prevent page scrolling when mouse is over PDF canvas
 - [x] Allow scrolling only in the sidebar area
 - [x] Keep zoom functionality working with mouse wheel over canvas
+
+## Sidebar and Zoom Improvements
+- [x] Fix right sidebar to scroll independently from canvas - Added flex-shrink-0
+- [x] Add auto-fit zoom when opening project - Calculates optimal zoom on PDF load
+- [x] Calculate optimal zoom to fit PDF within viewport - Considers container dimensions
