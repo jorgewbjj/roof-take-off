@@ -215,6 +215,19 @@ export default function MeasurementCanvas() {
     return inchDistance * scale;
   };
 
+  // Calculate perimeter for a polygon (total edge length)
+  const calculatePerimeter = (points: Point[]) => {
+    if (points.length < 2) return 0;
+    
+    let perimeter = 0;
+    for (let i = 0; i < points.length; i++) {
+      const p1 = points[i];
+      const p2 = points[(i + 1) % points.length]; // Wrap around to first point
+      perimeter += calculateDistance(p1, p2);
+    }
+    return perimeter;
+  };
+
   // Redraw overlay with measurements
   const redrawOverlay = () => {
     const canvas = overlayCanvasRef.current;
@@ -698,14 +711,18 @@ export default function MeasurementCanvas() {
     }
 
     // For line measurements (2 points), store distance as area
-    // For area measurements (3+ points), calculate actual area
+    // For area measurements (3+ points), calculate actual area and perimeter
     let area: number;
+    let perimeter: number | undefined;
+    
     if (currentPolygon.length === 2) {
-      // Line measurement: store distance
+      // Line measurement: store distance, no perimeter
       area = calculateDistance(currentPolygon[0], currentPolygon[1]);
+      perimeter = undefined;
     } else {
-      // Area measurement: calculate area
+      // Area measurement: calculate area and perimeter
       area = calculateArea(currentPolygon);
+      perimeter = calculatePerimeter(currentPolygon);
     }
 
     createMeasurementMutation.mutate({
@@ -713,6 +730,7 @@ export default function MeasurementCanvas() {
       name: measurementName,
       color: selectedColor,
       area: area.toFixed(2),
+      perimeter: perimeter ? perimeter.toFixed(2) : undefined,
       coordinates: currentPolygon,
     });
     setIsNameDialogOpen(false);
@@ -1170,13 +1188,18 @@ export default function MeasurementCanvas() {
                           />
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{measurement.name}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <div className="text-xs text-muted-foreground space-y-0.5">
                               {(measurement.coordinates as Point[]).length === 2 ? (
-                                <>{measurement.area} {scaleUnit}</>
+                                <div>{measurement.area} {scaleUnit}</div>
                               ) : (
-                                <>{measurement.area} {scaleUnit}²</>
+                                <>
+                                  <div>{measurement.area} {scaleUnit}²</div>
+                                  {measurement.perimeter && (
+                                    <div className="text-[10px]">Perimeter: {measurement.perimeter} {scaleUnit}</div>
+                                  )}
+                                </>
                               )}
-                            </p>
+                            </div>
                           </div>
                         </div>
                         <Button
@@ -1231,7 +1254,10 @@ export default function MeasurementCanvas() {
               {currentPolygon.length === 2 ? (
                 <>Distance: {calculateDistance(currentPolygon[0], currentPolygon[1]).toFixed(2)} {scaleUnit}</>
               ) : (
-                <>Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²</>
+                <div className="space-y-1">
+                  <div>Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²</div>
+                  <div className="text-xs">Perimeter: {calculatePerimeter(currentPolygon).toFixed(2)} {scaleUnit}</div>
+                </div>
               )}
             </DialogDescription>
           </DialogHeader>

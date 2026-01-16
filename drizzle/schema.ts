@@ -53,6 +53,7 @@ export const measurements = mysqlTable("measurements", {
   name: varchar("name", { length: 255 }).notNull(),
   color: varchar("color", { length: 7 }).notNull(), // Hex color code
   area: decimal("area", { precision: 12, scale: 2 }).notNull(),
+  perimeter: decimal("perimeter", { precision: 12, scale: 2 }), // Total edge length for area measurements
   coordinates: json("coordinates").notNull(), // Array of {x, y} points
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

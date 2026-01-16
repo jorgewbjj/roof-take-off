@@ -110,6 +110,7 @@ export const appRouter = router({
         name: z.string().min(1),
         color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
         area: z.string(),
+        perimeter: z.string().optional(),
         coordinates: z.array(z.object({ x: z.number(), y: z.number() })),
       }))
       .mutation(async ({ input }) => {

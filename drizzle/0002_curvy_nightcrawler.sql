@@ -1,0 +1,1 @@
+ALTER TABLE `measurements` ADD `perimeter` decimal(12,2);

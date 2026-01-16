@@ -133,3 +133,10 @@
 - [x] Display line length in measurement list (without ² symbol)
 - [x] Store line measurements in database (distance stored in area field)
 - [x] Render line measurements differently from area measurements in UI
+
+## Perimeter Calculation
+- [x] Add calculatePerimeter function for polygons
+- [x] Store perimeter in database for area measurements
+- [x] Display perimeter in measurement list for areas
+- [x] Show perimeter in Name Dialog for area measurements
+- [x] Update database schema to include perimeter field
