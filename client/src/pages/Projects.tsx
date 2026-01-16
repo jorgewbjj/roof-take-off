@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import { Plus, FileText, Trash2, Loader2, LogOut } from "lucide-react";
+import { PDFThumbnail } from "@/components/PDFThumbnail";
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
@@ -229,9 +230,10 @@ export default function Projects() {
                   </div>
                 </CardHeader>
                 <CardContent onClick={() => setLocation(`/project/${project.id}`)}>
-                  <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
-                    <FileText className="w-12 h-12 text-muted-foreground/50" />
-                  </div>
+                  <PDFThumbnail 
+                    pdfUrl={project.pdfUrl} 
+                    className="aspect-video rounded-md overflow-hidden"
+                  />
                 </CardContent>
               </Card>
             ))}

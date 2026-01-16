@@ -567,13 +567,45 @@ export default function MeasurementCanvas() {
     redrawOverlay();
   }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories]);
 
-  // Zoom controls
+  // Zoom controls with cursor-focused zooming
+  const zoomAtPoint = (newZoom: number, clientX?: number, clientY?: number) => {
+    if (!overlayCanvasRef.current || !containerRef.current) {
+      setZoomLevel(newZoom);
+      return;
+    }
+
+    const canvas = overlayCanvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    // Use cursor position if provided, otherwise use canvas center
+    const mouseX = clientX !== undefined ? clientX - rect.left : rect.width / 2;
+    const mouseY = clientY !== undefined ? clientY - rect.top : rect.height / 2;
+
+    // Calculate the point in canvas coordinates before zoom
+    const beforeX = (mouseX - panOffset.x) / zoomLevel;
+    const beforeY = (mouseY - panOffset.y) / zoomLevel;
+
+    // Update zoom
+    setZoomLevel(newZoom);
+
+    // Calculate new pan offset to keep the point under the cursor
+    const afterX = beforeX * newZoom;
+    const afterY = beforeY * newZoom;
+
+    setPanOffset({
+      x: mouseX - afterX,
+      y: mouseY - afterY
+    });
+  };
+
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 0.01, 4.0));
+    const newZoom = Math.min(zoomLevel + 0.01, 4.0);
+    zoomAtPoint(newZoom);
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.01, 0.1));
+    const newZoom = Math.max(zoomLevel - 0.01, 0.1);
+    zoomAtPoint(newZoom);
   };
 
   const handleZoomReset = () => {
@@ -581,11 +613,12 @@ export default function MeasurementCanvas() {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  // Handle mouse wheel zoom
+  // Handle mouse wheel zoom centered on cursor
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.01 : 0.01;
-    setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
+    const newZoom = Math.max(0.1, Math.min(4.0, zoomLevel + delta));
+    zoomAtPoint(newZoom, e.clientX, e.clientY);
   };
 
   // Handle mouse down for panning, drawing, or vertex dragging

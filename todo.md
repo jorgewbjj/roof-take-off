@@ -214,3 +214,11 @@
 - [x] Fix right sidebar to scroll independently from canvas - Added flex-shrink-0
 - [x] Add auto-fit zoom when opening project - Calculates optimal zoom on PDF load
 - [x] Calculate optimal zoom to fit PDF within viewport - Considers container dimensions
+
+## PDF Preview and Cursor-Focused Zoom
+- [x] Add PDF preview thumbnails to projects list page
+- [x] Generate thumbnail from first page of PDF - Created PDFThumbnail component
+- [x] Display thumbnail in project card - Replaced FileText icon with actual PDF preview
+- [x] Implement cursor-focused zoom (zoom centered on mouse position)
+- [x] Update zoom in/out to maintain cursor position as zoom center - Uses zoomAtPoint function
+- [x] Update scroll wheel zoom to center on cursor - Passes clientX/clientY to zoomAtPoint
