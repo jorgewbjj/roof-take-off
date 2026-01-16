@@ -179,6 +179,14 @@ export default function MeasurementCanvas() {
   // Add keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Backspace key to undo last point while drawing
+      if (e.key === 'Backspace' && isDrawing && currentPolygon.length > 0) {
+        e.preventDefault();
+        setCurrentPolygon(prev => prev.slice(0, -1));
+        redrawOverlay();
+        return;
+      }
+      
       // Escape key to complete drawing (2+ points for line, 3+ for area)
       if (e.key === 'Escape' && isDrawing && currentPolygon.length >= 2) {
         e.preventDefault();
@@ -1226,46 +1234,89 @@ export default function MeasurementCanvas() {
                     No measurements yet
                   </p>
                 ) : (
-                  <div className="space-y-2">
-                    {measurements?.map((measurement) => (
-                      <div
-                        key={measurement.id}
-                        className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 flex-1">
-                          <div
-                            className="w-4 h-4 rounded"
-                            style={{ backgroundColor: measurement.color }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm truncate">{measurement.name}</p>
-                            <div className="text-xs text-muted-foreground space-y-0.5">
-                              {(measurement.coordinates as Point[]).length === 2 ? (
-                                <div>{measurement.area} {scaleUnit}</div>
-                              ) : (
-                                <>
-                                  <div>{measurement.area} {scaleUnit}²</div>
-                                  {measurement.perimeter && (
-                                    <div className="text-[10px]">Perimeter: {measurement.perimeter} {scaleUnit}</div>
-                                  )}
-                                </>
-                              )}
+                  <div className="space-y-3">
+                    {(() => {
+                      // Group measurements by name (category)
+                      const grouped = measurements?.reduce((acc, m) => {
+                        if (!acc[m.name]) acc[m.name] = [];
+                        acc[m.name].push(m);
+                        return acc;
+                      }, {} as Record<string, typeof measurements>);
+
+                      return Object.entries(grouped || {}).map(([categoryName, items]) => {
+                        // Calculate total linear feet for line measurements in this category
+                        const totalLinearFt = items
+                          .filter(m => m.perimeter === null || m.perimeter === undefined)
+                          .reduce((sum, m) => sum + parseFloat(m.area), 0);
+                        
+                        const hasLines = totalLinearFt > 0;
+
+                        return (
+                          <div key={categoryName} className="border border-border rounded-lg overflow-hidden">
+                            {/* Category Header */}
+                            <div className="bg-accent/30 px-3 py-2 border-b border-border">
+                              <div className="flex items-center justify-between">
+                                <p className="font-semibold text-sm">{categoryName}</p>
+                                {hasLines && (
+                                  <p className="text-xs font-medium text-primary">
+                                    Total: {totalLinearFt.toFixed(2)} {scaleUnit}
+                                  </p>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {items.length} measurement{items.length === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                            
+                            {/* Category Items */}
+                            <div className="divide-y divide-border">
+                              {items.map((measurement) => {
+                                const isLine = measurement.perimeter === null || measurement.perimeter === undefined;
+                                return (
+                                  <div
+                                    key={measurement.id}
+                                    className="flex items-center justify-between p-2.5 hover:bg-accent/50 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2.5 flex-1">
+                                      <div
+                                        className="w-3 h-3 rounded"
+                                        style={{ backgroundColor: measurement.color }}
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs text-muted-foreground">
+                                          {isLine ? (
+                                            <div>{measurement.area} {scaleUnit}</div>
+                                          ) : (
+                                            <>
+                                              <div>{measurement.area} {scaleUnit}²</div>
+                                              {measurement.perimeter && (
+                                                <div className="text-[10px]">Perimeter: {measurement.perimeter} {scaleUnit}</div>
+                                              )}
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0"
+                                      onClick={() => {
+                                        if (confirm("Delete this measurement?")) {
+                                          deleteMeasurementMutation.mutate({ id: measurement.id });
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                                    </Button>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            if (confirm("Delete this measurement?")) {
-                              deleteMeasurementMutation.mutate({ id: measurement.id });
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </CardContent>

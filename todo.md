@@ -175,3 +175,10 @@
 - [x] Fix preview showing closed filled triangle while drawing
 - [x] Remove fill and closing path from drawing preview - Only draw consecutive segments
 - [x] Only show closed shape when explicitly closed (clicked first point)
+
+## New Features
+- [x] Backspace key to undo last point during drawing
+- [x] Measurement categories - allow same name for multiple measurements
+- [x] Group measurements by name/category in sidebar
+- [x] Show total linear feet per category
+- [x] Allow continuing to add measurements to existing categories
