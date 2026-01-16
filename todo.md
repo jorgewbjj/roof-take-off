@@ -145,4 +145,10 @@
 - [x] Fix area calculation producing incorrect values (20x10 showing 1.8M sq ft instead of 200)
 - [x] Review calculateArea formula and scale application
 - [x] Added proper pixel-to-inch-to-real-world conversion (÷96² then ×scale²)
-- [ ] Test with known dimensions to verify accuracy
+- [x] Test with known dimensions to verify accuracy
+
+## Line Measurement Bugs
+- [x] Fix line measurement calculation (20m showing as 100m) - Fixed exact measurement mode distance conversion
+- [x] Display saved line measurements on canvas (currently only in sidebar) - Added line rendering with endpoints and distance labels
+- [x] Ensure feet is default unit everywhere (not meters) - Feet already set as default in state initialization
+- [x] Remove meters from default options unless explicitly changed - Meters only appear when user selects them

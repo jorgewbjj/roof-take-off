@@ -199,16 +199,14 @@ export default function MeasurementCanvas() {
 
   // Calculate real-world distance from pixel distance
   // scale represents: 1 inch on PDF = scale feet in real world
+  // Note: coordinates are already normalized when stored, so no zoom division needed
   const calculateDistance = (p1: Point, p2: Point) => {
     const dx = p2.x - p1.x;
     const dy = p2.y - p1.y;
     const pixelDistance = Math.sqrt(dx * dx + dy * dy);
     
-    // Normalize by zoom level to get base pixel distance
-    const normalizedPixelDistance = pixelDistance / zoomLevel;
-    
     // Convert pixel distance to inches (assuming 96 DPI standard)
-    const inchDistance = normalizedPixelDistance / 96;
+    const inchDistance = pixelDistance / 96;
     
     // Convert inches to real-world units using scale
     // If scale = 20 and unit = ft, then 1 inch = 20 ft
@@ -239,7 +237,7 @@ export default function MeasurementCanvas() {
     // Draw saved measurements (scale coordinates with zoom level)
     measurements?.forEach((measurement) => {
       const coords = measurement.coordinates as Point[];
-      if (coords.length < 3) return;
+      if (coords.length < 2) return;
 
       // Scale coordinates with zoom level
       const scaledCoords = coords.map(p => ({
@@ -248,42 +246,76 @@ export default function MeasurementCanvas() {
       }));
 
       const isSelected = isEditMode && selectedMeasurementId === measurement.id;
+      const isLine = coords.length === 2;
 
-      ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
-      ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
-      ctx.lineWidth = isSelected ? 4 : 2;
+      if (isLine) {
+        // Draw line measurement
+        ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
+        ctx.lineWidth = isSelected ? 4 : 3;
+        ctx.beginPath();
+        ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
+        ctx.lineTo(scaledCoords[1].x, scaledCoords[1].y);
+        ctx.stroke();
 
-      ctx.beginPath();
-      ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
-      scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Draw vertices for selected measurement
-      if (isSelected) {
-        scaledCoords.forEach((point, index) => {
+        // Draw endpoints
+        scaledCoords.forEach((point) => {
           ctx.beginPath();
-          ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
-          ctx.fillStyle = "#22c55e";
+          ctx.arc(point.x, point.y, isSelected ? 6 : 4, 0, Math.PI * 2);
+          ctx.fillStyle = isSelected ? "#22c55e" : measurement.color;
           ctx.fill();
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 2;
           ctx.stroke();
         });
-      }
 
-      // Draw label with area
-      const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
-      const centerY = scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length;
-      ctx.fillStyle = "#000";
-      ctx.fillRect(centerX - 60, centerY - 25, 120, 40);
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 12px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(measurement.name, centerX, centerY - 8);
-      ctx.font = "11px sans-serif";
-      ctx.fillText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 8);
+        // Draw label with distance at midpoint
+        const midX = (scaledCoords[0].x + scaledCoords[1].x) / 2;
+        const midY = (scaledCoords[0].y + scaledCoords[1].y) / 2;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(midX - 50, midY - 20, 100, 30);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${measurement.area} ${scaleUnit}`, midX, midY);
+      } else {
+        // Draw area measurement (polygon)
+        ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
+        ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
+        ctx.lineWidth = isSelected ? 4 : 2;
+
+        ctx.beginPath();
+        ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
+        scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Draw vertices for selected measurement
+        if (isSelected) {
+          scaledCoords.forEach((point, index) => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 6, 0, Math.PI * 2);
+            ctx.fillStyle = "#22c55e";
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          });
+        }
+
+        // Draw label with area
+        const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
+        const centerY = scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length;
+        ctx.fillStyle = "#000";
+        ctx.fillRect(centerX - 60, centerY - 25, 120, 40);
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(measurement.name, centerX, centerY - 8);
+        ctx.font = "11px sans-serif";
+        ctx.fillText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 8);
+      }
     });
 
     // Draw current polygon with AutoCAD-style lines and measurements
@@ -662,7 +694,9 @@ export default function MeasurementCanvas() {
       const angle = Math.atan2(y - startScaled.y, x - startScaled.x);
       
       // Calculate end point at exact distance
-      const distanceInPixels = parseFloat(exactDistance) / scale;
+      // Convert real-world distance to pixels: distance (ft) / scale (ft/inch) = inches, then inches * 96 = pixels
+      const distanceInInches = parseFloat(exactDistance) / scale;
+      const distanceInPixels = distanceInInches * 96;
       const endX = startPoint.x + (distanceInPixels * Math.cos(angle));
       const endY = startPoint.y + (distanceInPixels * Math.sin(angle));
       
