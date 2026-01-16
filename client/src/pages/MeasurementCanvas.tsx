@@ -958,14 +958,17 @@ export default function MeasurementCanvas() {
                   return;
                 }
 
-                if (isDrawing) {
-                  setCursorPosition({ x, y });
-                } else if (isPanning && panStart) {
-                  // Pan the canvas
+                // Handle panning (independent of drawing)
+                if (isPanning && panStart) {
                   const dx = e.clientX - panStart.x;
                   const dy = e.clientY - panStart.y;
                   setPanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
                   setPanStart({ x: e.clientX, y: e.clientY });
+                }
+                
+                // Handle drawing cursor (can happen simultaneously with panning)
+                if (isDrawing) {
+                  setCursorPosition({ x, y });
                 }
               }}
               onMouseLeave={() => {

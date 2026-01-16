@@ -201,6 +201,6 @@
 - [x] Update zoom in/out button increment - Changed from 0.1 to 0.01
 
 ## Panning During Drawing
-- [x] Enable middle mouse button (scroll wheel click) for panning
-- [x] Allow panning while in drawing mode without interrupting measurement
-- [x] Update cursor to indicate pan mode when middle button is held - Shows grabbing cursor
+- [x] Fix middle mouse button panning - not working during drawing mode
+- [x] Debug why panning doesn't activate when drawing - Fixed else-if blocking panning
+- [x] Test and verify panning works while measuring - Both actions now independent
