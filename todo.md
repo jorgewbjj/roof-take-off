@@ -157,3 +157,9 @@
 - [x] Fix calibration - saved measurements now match calibrated distance
 - [x] Fix real-time preview distance display while moving mouse - Now uses normalized coordinates
 - [x] Ensure preview distance uses same calculation as saved measurements - All distance calculations consistent
+
+## Measurement Behavior Change
+- [x] Change default behavior to create line measurements (not areas)
+- [x] Only create area when user explicitly closes shape by clicking start point
+- [x] Remove Escape key auto-closing that creates areas - Now saves as polyline
+- [x] Update Escape key to save current polyline as line measurement

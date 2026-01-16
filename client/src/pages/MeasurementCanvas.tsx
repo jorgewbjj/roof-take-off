@@ -62,6 +62,7 @@ export default function MeasurementCanvas() {
   const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
   const [calibrationDistance, setCalibrationDistance] = useState("");
   const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
+  const [isShapeClosed, setIsShapeClosed] = useState(false); // Track if user clicked first point to close shape
   const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
@@ -82,6 +83,7 @@ export default function MeasurementCanvas() {
       toast.success("Measurement saved");
       setCurrentPolygon([]);
       setMeasurementName("");
+      setIsShapeClosed(false);
       redrawOverlay();
     },
   });
@@ -397,20 +399,7 @@ export default function MeasurementCanvas() {
         ctx.stroke();
       });
 
-      // Show area preview if shape can be closed
-      if (scaledPolygon.length >= 3) {
-        const area = calculateArea(currentPolygon);
-        const centerX = scaledPolygon.reduce((sum, p) => sum + p.x, 0) / scaledPolygon.length;
-        const centerY = scaledPolygon.reduce((sum, p) => sum + p.y, 0) / scaledPolygon.length;
-        
-        ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
-        ctx.fillRect(centerX - 50, centerY - 15, 100, 30);
-        ctx.fillStyle = "#4ade80";
-        ctx.font = "bold 12px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(`Area: ${area.toFixed(1)} ${scaleUnit}²`, centerX, centerY);
-      }
+      // Area preview removed - users must explicitly close shape to create area
     }
 
     // Draw calibration line
@@ -684,6 +673,7 @@ export default function MeasurementCanvas() {
       
       // If clicking within 15 pixels of first point, auto-close and save
       if (distance < 15) {
+        setIsShapeClosed(true); // Mark as explicitly closed for area calculation
         setIsNameDialogOpen(true);
         return;
       }
@@ -759,14 +749,15 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    // For line measurements (2 points), store distance as area
-    // For area measurements (3+ points), calculate actual area and perimeter
+    // Determine if this is a line or area measurement
+    // Line: 2 points OR shape not explicitly closed (Escape key)
+    // Area: 3+ points AND shape explicitly closed (clicked first point)
     let area: number;
     let perimeter: number | undefined;
     
-    if (currentPolygon.length === 2) {
-      // Line measurement: store distance, no perimeter
-      area = calculateDistance(currentPolygon[0], currentPolygon[1]);
+    if (currentPolygon.length === 2 || !isShapeClosed) {
+      // Line measurement: calculate total polyline length
+      area = calculatePerimeter(currentPolygon);
       perimeter = undefined;
     } else {
       // Area measurement: calculate area and perimeter
@@ -1300,8 +1291,8 @@ export default function MeasurementCanvas() {
           <DialogHeader>
             <DialogTitle>Name This Measurement</DialogTitle>
             <DialogDescription>
-              {currentPolygon.length === 2 ? (
-                <>Distance: {calculateDistance(currentPolygon[0], currentPolygon[1]).toFixed(2)} {scaleUnit}</>
+              {currentPolygon.length === 2 || !isShapeClosed ? (
+                <>Distance: {calculatePerimeter(currentPolygon).toFixed(2)} {scaleUnit}</>
               ) : (
                 <div className="space-y-1">
                   <div>Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²</div>
@@ -1321,7 +1312,10 @@ export default function MeasurementCanvas() {
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNameDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setIsNameDialogOpen(false);
+              setIsShapeClosed(false);
+            }}>
               Cancel
             </Button>
             <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending}>
