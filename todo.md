@@ -238,3 +238,8 @@
 - [x] List each category with total linear feet (for lines) or square feet (for areas)
 - [x] Use minimalist design with clean typography
 - [x] Add download button in Export dropdown
+
+## Sticky Header Fix
+- [x] Make header toolbar sticky/fixed at top of page
+- [x] Ensure header stays visible when scrolling canvas
+- [x] Adjust canvas container to account for fixed header height

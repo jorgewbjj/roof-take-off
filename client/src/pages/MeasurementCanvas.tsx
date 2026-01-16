@@ -1018,7 +1018,7 @@ export default function MeasurementCanvas() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border bg-card">
+      <header className="sticky top-0 z-50 border-b border-border bg-card shadow-sm">
         {/* Top Row - Project Name and Export */}
         <div className="px-6 py-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-4">
