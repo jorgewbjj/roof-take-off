@@ -6,12 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
+import { jsPDF } from "jspdf";
 
 // Configure PDF.js worker - use local worker from node_modules
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -884,8 +886,85 @@ export default function MeasurementCanvas() {
     setIsNameDialogOpen(false);
   };
 
-  // Export measurements
-  const exportMeasurements = () => {
+  // Export measurements to PDF
+  const exportMeasurementsPDF = () => {
+    if (!measurements || measurements.length === 0) {
+      toast.error("No measurements to export");
+      return;
+    }
+
+    // Group measurements by category
+    const grouped = measurements.reduce((acc, m) => {
+      if (!acc[m.name]) acc[m.name] = [];
+      acc[m.name].push(m);
+      return acc;
+    }, {} as Record<string, typeof measurements>);
+
+    // Create PDF
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 20;
+    let yPos = 25;
+
+    // Header
+    doc.setFontSize(20);
+    doc.setFont("helvetica", "bold");
+    doc.text(project?.name || "Roof Plan Measurements", margin, yPos);
+    
+    yPos += 10;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text(new Date().toLocaleDateString(), margin, yPos);
+    
+    yPos += 15;
+    doc.setTextColor(0, 0, 0);
+
+    // Categories
+    Object.entries(grouped).forEach(([categoryName, items]) => {
+      // Calculate totals
+      const lineItems = items.filter(m => m.perimeter === null || m.perimeter === undefined);
+      const areaItems = items.filter(m => m.perimeter !== null && m.perimeter !== undefined);
+      
+      const totalLinearFt = lineItems.reduce((sum, m) => sum + parseFloat(m.area), 0);
+      const totalAreaSqFt = areaItems.reduce((sum, m) => sum + parseFloat(m.area), 0);
+
+      // Check if we need a new page
+      if (yPos > 270) {
+        doc.addPage();
+        yPos = 25;
+      }
+
+      // Category name
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text(categoryName, margin, yPos);
+      yPos += 8;
+
+      // Totals
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "normal");
+      
+      if (totalLinearFt > 0) {
+        doc.text(`Total: ${totalLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
+        yPos += 7;
+      }
+      
+      if (totalAreaSqFt > 0) {
+        doc.text(`Total: ${totalAreaSqFt.toFixed(2)} ${scaleUnit}²`, margin + 5, yPos);
+        yPos += 7;
+      }
+
+      yPos += 8;
+    });
+
+    // Save PDF
+    doc.save(`${project?.name || "measurements"}.pdf`);
+    toast.success("PDF exported");
+  };
+
+  // Export measurements to CSV
+  const exportMeasurementsCSV = () => {
     if (!measurements || measurements.length === 0) {
       toast.error("No measurements to export");
       return;
@@ -909,7 +988,7 @@ export default function MeasurementCanvas() {
     a.download = `${project?.name || "measurements"}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("Measurements exported");
+    toast.success("CSV exported");
   };
 
   if (authLoading || projectLoading) {
@@ -971,10 +1050,24 @@ export default function MeasurementCanvas() {
               </div>
             )}
           </div>
-          <Button variant="outline" size="sm" onClick={exportMeasurements} className="gap-2">
-            <Download className="w-4 h-4" />
-            Export
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Download className="w-4 h-4" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={exportMeasurementsPDF} className="gap-2">
+                <FileText className="w-4 h-4" />
+                Export PDF Report
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportMeasurementsCSV} className="gap-2">
+                <Download className="w-4 h-4" />
+                Export CSV Data
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* Bottom Row - Toolbar with all controls */}

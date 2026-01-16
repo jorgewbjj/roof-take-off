@@ -231,3 +231,10 @@
 - [x] Move drawing tools to top header - Minimalist design
 - [x] Keep only measurements list in right sidebar - Removed all control cards
 - [x] Make layout minimalist to maximize canvas space - Clean professional interface
+
+## PDF Export Feature
+- [x] Add PDF generation for measurement report
+- [x] Show project name and date in PDF header
+- [x] List each category with total linear feet (for lines) or square feet (for areas)
+- [x] Use minimalist design with clean typography
+- [x] Add download button in Export dropdown
