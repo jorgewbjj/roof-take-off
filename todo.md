@@ -249,3 +249,9 @@
 - [x] Keep PDF centered and stable in canvas position during zoom
 - [x] Ensure all measurements stay aligned with PDF during zoom
 - [x] Verify drawing, editing, and panning still work correctly after fix
+
+## Thumbnail Preview Fix
+- [x] Fix PDF thumbnail preview not showing on projects list page
+- [x] Investigate PDFThumbnail component rendering issue
+- [x] Ensure thumbnails load correctly for all projects
+- [x] Verify everything else remains unchanged

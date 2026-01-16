@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { FileText, Loader2 } from "lucide-react";
 
-// Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configure PDF.js worker - use local worker from node_modules
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).toString();
 
 interface PDFThumbnailProps {
   pdfUrl: string;
@@ -16,7 +19,15 @@ export function PDFThumbnail({ pdfUrl, className = "" }: PDFThumbnailProps) {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!pdfUrl || !canvasRef.current) return;
+    if (!pdfUrl) return;
+
+    // Small delay to ensure canvas is mounted
+    const timer = setTimeout(() => {
+      if (!canvasRef.current) {
+        setError(true);
+        setLoading(false);
+        return;
+      }
 
     const renderThumbnail = async () => {
       try {
@@ -27,6 +38,11 @@ export function PDFThumbnail({ pdfUrl, className = "" }: PDFThumbnailProps) {
           url: pdfUrl,
           withCredentials: false,
           isEvalSupported: false,
+          httpHeaders: {
+            'Accept': 'application/pdf',
+          },
+          useSystemFonts: true,
+          standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/',
         });
 
         const pdf = await loadingTask.promise;
@@ -65,28 +81,25 @@ export function PDFThumbnail({ pdfUrl, className = "" }: PDFThumbnailProps) {
       }
     };
 
-    renderThumbnail();
+      renderThumbnail();
+    }, 100); // Wait 100ms for canvas to mount
+
+    return () => clearTimeout(timer);
   }, [pdfUrl]);
-
-  if (loading) {
-    return (
-      <div className={`flex items-center justify-center bg-muted ${className}`}>
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground/50" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`flex items-center justify-center bg-muted ${className}`}>
-        <FileText className="w-12 h-12 text-muted-foreground/50" />
-      </div>
-    );
-  }
 
   return (
     <div className={`flex items-center justify-center bg-muted ${className}`}>
-      <canvas ref={canvasRef} className="max-w-full max-h-full object-contain" />
+      {loading && !error && (
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground/50 absolute" />
+      )}
+      {error && (
+        <FileText className="w-12 h-12 text-muted-foreground/50 absolute" />
+      )}
+      <canvas 
+        ref={canvasRef} 
+        className="max-w-full max-h-full object-contain"
+        style={{ opacity: loading || error ? 0 : 1 }}
+      />
     </div>
   );
 }
