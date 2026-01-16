@@ -540,11 +540,11 @@ export default function MeasurementCanvas() {
 
   // Zoom controls
   const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 0.1, 4.0));
+    setZoomLevel(prev => Math.min(prev + 0.01, 4.0));
   };
 
   const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.1, 0.1));
+    setZoomLevel(prev => Math.max(prev - 0.01, 0.1));
   };
 
   const handleZoomReset = () => {
@@ -555,7 +555,7 @@ export default function MeasurementCanvas() {
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const delta = e.deltaY > 0 ? -0.01 : 0.01;
     setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
   };
 

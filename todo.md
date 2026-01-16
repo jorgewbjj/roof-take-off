@@ -194,3 +194,8 @@
 - [x] Track visibility state per category name using Set
 - [x] Hide/show measurements on canvas based on category visibility
 - [x] Persist visibility state during session
+
+## Zoom Control Refinement
+- [x] Change zoom increment from 10% to 1% for smoother control
+- [x] Update scroll wheel zoom increment - Changed from 0.1 to 0.01
+- [x] Update zoom in/out button increment - Changed from 0.1 to 0.01
