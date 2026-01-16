@@ -152,3 +152,8 @@
 - [x] Display saved line measurements on canvas (currently only in sidebar) - Added line rendering with endpoints and distance labels
 - [x] Ensure feet is default unit everywhere (not meters) - Feet already set as default in state initialization
 - [x] Remove meters from default options unless explicitly changed - Meters only appear when user selects them
+
+## Calibration Verification Bug
+- [x] Fix calibration - marking a line after calibration doesn't return the calibrated value
+- [x] Debug the relationship between calibration and line measurement calculations - Fixed coordinate system mismatch in exact measurement mode
+- [x] Ensure calibrated scale is properly applied to all measurement types - All calculations now use normalized coordinates consistently

@@ -688,12 +688,15 @@ export default function MeasurementCanvas() {
     // Exact measurement mode: create line of specific length
     if (isExactMode && exactDistance && currentPolygon.length === 1) {
       const startPoint = currentPolygon[0];
-      const startScaled = { x: startPoint.x * zoomLevel, y: startPoint.y * zoomLevel };
       
-      // Calculate angle from start point to cursor
-      const angle = Math.atan2(y - startScaled.y, x - startScaled.x);
+      // Normalize cursor position to match stored coordinates
+      const normalizedX = x / zoomLevel;
+      const normalizedY = y / zoomLevel;
       
-      // Calculate end point at exact distance
+      // Calculate angle from start point to cursor (both in normalized space)
+      const angle = Math.atan2(normalizedY - startPoint.y, normalizedX - startPoint.x);
+      
+      // Calculate end point at exact distance in normalized space
       // Convert real-world distance to pixels: distance (ft) / scale (ft/inch) = inches, then inches * 96 = pixels
       const distanceInInches = parseFloat(exactDistance) / scale;
       const distanceInPixels = distanceInInches * 96;
