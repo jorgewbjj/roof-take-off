@@ -700,7 +700,15 @@ export default function MeasurementCanvas() {
       area += points[i].x * points[j].y;
       area -= points[j].x * points[i].y;
     }
-    return Math.abs(area / 2) * scale * scale;
+    // Get pixel area
+    const pixelArea = Math.abs(area / 2);
+    
+    // Convert pixel area to inch area (assuming 96 DPI)
+    const inchArea = pixelArea / (96 * 96);
+    
+    // Convert inch area to real-world area using scale
+    // If scale = 20 and unit = ft, then 1 inch = 20 ft, so 1 inch² = 400 ft²
+    return inchArea * scale * scale;
   };
 
   // Save measurement

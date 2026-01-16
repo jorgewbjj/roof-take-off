@@ -140,3 +140,9 @@
 - [x] Display perimeter in measurement list for areas
 - [x] Show perimeter in Name Dialog for area measurements
 - [x] Update database schema to include perimeter field
+
+## Critical Bug - Area Calculation
+- [x] Fix area calculation producing incorrect values (20x10 showing 1.8M sq ft instead of 200)
+- [x] Review calculateArea formula and scale application
+- [x] Added proper pixel-to-inch-to-real-world conversion (÷96² then ×scale²)
+- [ ] Test with known dimensions to verify accuracy
