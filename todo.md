@@ -119,3 +119,8 @@
 - [x] Fix calibration so measuring the same distance returns exact calibrated value
 - [x] Verify distance calculation formula matches calibration formula
 - [x] Ensure zoom level doesn't affect measurement accuracy (normalized by zoom in calculateDistance)
+
+## Middle Mouse Button Panning
+- [x] Enable middle mouse button (scroll button) to pan the document
+- [x] Allow panning while in drawing mode without interfering with measurements
+- [x] Show grabbing cursor during middle mouse button panning

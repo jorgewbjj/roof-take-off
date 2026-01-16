@@ -489,6 +489,14 @@ export default function MeasurementCanvas() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
+    // Middle mouse button (button 1) always pans, regardless of mode
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+      return;
+    }
+
     // Edit mode: check if clicking on a vertex
     if (isEditMode && selectedMeasurementId && measurements) {
       const selectedMeasurement = measurements.find(m => m.id === selectedMeasurementId);
@@ -845,6 +853,7 @@ export default function MeasurementCanvas() {
                 setIsPanning(false);
                 setPanStart(null);
               }}
+              onContextMenu={(e) => e.preventDefault()}
               className="absolute top-0 left-0"
               style={{ 
                 pointerEvents: "auto",
