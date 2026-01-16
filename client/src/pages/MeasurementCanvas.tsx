@@ -569,48 +569,18 @@ export default function MeasurementCanvas() {
     redrawOverlay();
   }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories]);
 
-  // Zoom controls with cursor-focused zooming
+  // Zoom controls - keep PDF centered and stable
   const zoomAtPoint = (newZoom: number, clientX?: number, clientY?: number) => {
-    if (!overlayCanvasRef.current || !containerRef.current) {
-      setZoomLevel(newZoom);
-      return;
-    }
-
-    const canvas = overlayCanvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    // Use cursor position if provided, otherwise use canvas center
-    const mouseX = clientX !== undefined ? clientX - rect.left : rect.width / 2;
-    const mouseY = clientY !== undefined ? clientY - rect.top : rect.height / 2;
-
-    // Use functional updates to avoid stale closures
-    setZoomLevel(prevZoom => {
-      setPanOffset(prevOffset => {
-        // Calculate the point in canvas coordinates before zoom
-        const beforeX = (mouseX - prevOffset.x) / prevZoom;
-        const beforeY = (mouseY - prevOffset.y) / prevZoom;
-
-        // Calculate new pan offset to keep the point under the cursor
-        const afterX = beforeX * newZoom;
-        const afterY = beforeY * newZoom;
-
-        return {
-          x: mouseX - afterX,
-          y: mouseY - afterY
-        };
-      });
-      return newZoom;
-    });
+    setZoomLevel(newZoom);
+    // Don't adjust pan offset - let PDF stay in its current position
   };
 
   const handleZoomIn = () => {
-    const newZoom = Math.min(zoomLevel + 0.01, 4.0);
-    zoomAtPoint(newZoom);
+    setZoomLevel(prev => Math.min(prev + 0.01, 4.0));
   };
 
   const handleZoomOut = () => {
-    const newZoom = Math.max(zoomLevel - 0.01, 0.1);
-    zoomAtPoint(newZoom);
+    setZoomLevel(prev => Math.max(prev - 0.01, 0.1));
   };
 
   const handleZoomReset = () => {
@@ -618,12 +588,11 @@ export default function MeasurementCanvas() {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  // Handle mouse wheel zoom centered on cursor
+  // Handle mouse wheel zoom - keep PDF stable
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.01 : 0.01;
-    const newZoom = Math.max(0.1, Math.min(4.0, zoomLevel + delta));
-    zoomAtPoint(newZoom, e.clientX, e.clientY);
+    setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
   };
 
   // Handle mouse down for panning, drawing, or vertex dragging

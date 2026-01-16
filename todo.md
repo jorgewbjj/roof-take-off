@@ -243,3 +243,9 @@
 - [x] Make header toolbar sticky/fixed at top of page
 - [x] Ensure header stays visible when scrolling canvas
 - [x] Adjust canvas container to account for fixed header height
+
+## Zoom Behavior Fix
+- [x] Fix PDF drifting/moving when zooming in/out
+- [x] Keep PDF centered and stable in canvas position during zoom
+- [x] Ensure all measurements stay aligned with PDF during zoom
+- [x] Verify drawing, editing, and panning still work correctly after fix
