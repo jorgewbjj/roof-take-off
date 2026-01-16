@@ -163,3 +163,5 @@
 - [x] Only create area when user explicitly closes shape by clicking start point
 - [x] Remove Escape key auto-closing that creates areas - Now saves as polyline
 - [x] Update Escape key to save current polyline as line measurement
+- [x] Fix rendering: line measurements showing as closed filled shapes
+- [x] Render line measurements as open polylines without fill - Check perimeter field to distinguish

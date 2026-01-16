@@ -248,19 +248,23 @@ export default function MeasurementCanvas() {
       }));
 
       const isSelected = isEditMode && selectedMeasurementId === measurement.id;
-      const isLine = coords.length === 2;
+      // Line measurement: perimeter is undefined (only distance stored in area field)
+      // Area measurement: perimeter has a value
+      const isLine = measurement.perimeter === null || measurement.perimeter === undefined;
 
       if (isLine) {
-        // Draw line measurement
+        // Draw line measurement (polyline - no fill, no closing)
         ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
         ctx.lineWidth = isSelected ? 4 : 3;
         ctx.beginPath();
         ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
-        ctx.lineTo(scaledCoords[1].x, scaledCoords[1].y);
+        for (let i = 1; i < scaledCoords.length; i++) {
+          ctx.lineTo(scaledCoords[i].x, scaledCoords[i].y);
+        }
         ctx.stroke();
 
-        // Draw endpoints
-        scaledCoords.forEach((point) => {
+        // Draw endpoints and vertices
+        scaledCoords.forEach((point, index) => {
           ctx.beginPath();
           ctx.arc(point.x, point.y, isSelected ? 6 : 4, 0, Math.PI * 2);
           ctx.fillStyle = isSelected ? "#22c55e" : measurement.color;
@@ -270,16 +274,16 @@ export default function MeasurementCanvas() {
           ctx.stroke();
         });
 
-        // Draw label with distance at midpoint
-        const midX = (scaledCoords[0].x + scaledCoords[1].x) / 2;
-        const midY = (scaledCoords[0].y + scaledCoords[1].y) / 2;
+        // Draw label with total distance at center of polyline
+        const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
+        const centerY = scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length;
         ctx.fillStyle = "#000";
-        ctx.fillRect(midX - 50, midY - 20, 100, 30);
+        ctx.fillRect(centerX - 50, centerY - 20, 100, 30);
         ctx.fillStyle = "#fff";
         ctx.font = "bold 11px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(`${measurement.area} ${scaleUnit}`, midX, midY);
+        ctx.fillText(`${measurement.area} ${scaleUnit}`, centerX, centerY);
       } else {
         // Draw area measurement (polygon)
         ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
