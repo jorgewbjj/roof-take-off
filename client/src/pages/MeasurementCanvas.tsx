@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -25,6 +26,15 @@ const PRESET_COLORS = [
   "#ec4899", "#14b8a6", "#f97316", "#6366f1", "#84cc16"
 ];
 
+const PRESET_CATEGORIES = [
+  "Drip Edge",
+  "Walk Pads",
+  "Coping",
+  "Gutter",
+  "Roofing Field",
+  "Other"
+];
+
 export default function MeasurementCanvas() {
   const { id } = useParams<{ id: string }>();
   const projectId = parseInt(id || "0");
@@ -43,6 +53,8 @@ export default function MeasurementCanvas() {
   const [currentPolygon, setCurrentPolygon] = useState<Point[]>([]);
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
   const [measurementName, setMeasurementName] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("Drip Edge");
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -190,6 +202,10 @@ export default function MeasurementCanvas() {
       // Escape key to complete drawing (2+ points for line, 3+ for area)
       if (e.key === 'Escape' && isDrawing && currentPolygon.length >= 2) {
         e.preventDefault();
+        // Reset category selection to default
+        setSelectedCategory("Drip Edge");
+        setMeasurementName("Drip Edge");
+        setIsCustomCategory(false);
         setIsNameDialogOpen(true);
       }
       
@@ -693,6 +709,10 @@ export default function MeasurementCanvas() {
       // If clicking within 15 pixels of first point, auto-close and save
       if (distance < 15) {
         setIsShapeClosed(true); // Mark as explicitly closed for area calculation
+        // Reset category selection to default
+        setSelectedCategory("Drip Edge");
+        setMeasurementName("Drip Edge");
+        setIsCustomCategory(false);
         setIsNameDialogOpen(true);
         return;
       }
@@ -1363,15 +1383,48 @@ export default function MeasurementCanvas() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="measurement-name">Measurement Name</Label>
-            <Input
-              id="measurement-name"
-              value={measurementName}
-              onChange={(e) => setMeasurementName(e.target.value)}
-              placeholder="e.g., North Wing"
-              className="mt-2"
-            />
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="category-select">Category</Label>
+              <Select
+                value={isCustomCategory ? "Other" : selectedCategory}
+                onValueChange={(value) => {
+                  if (value === "Other") {
+                    setIsCustomCategory(true);
+                    setSelectedCategory("");
+                    setMeasurementName("");
+                  } else {
+                    setIsCustomCategory(false);
+                    setSelectedCategory(value);
+                    setMeasurementName(value);
+                  }
+                }}
+              >
+                <SelectTrigger id="category-select">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {isCustomCategory && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-name">Custom Category Name</Label>
+                <Input
+                  id="custom-name"
+                  value={measurementName}
+                  onChange={(e) => setMeasurementName(e.target.value)}
+                  placeholder="Enter custom category name"
+                  autoFocus
+                />
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {

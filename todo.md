@@ -182,3 +182,9 @@
 - [x] Group measurements by name/category in sidebar
 - [x] Show total linear feet per category
 - [x] Allow continuing to add measurements to existing categories
+
+## Category Dropdown
+- [x] Add dropdown with preset categories in name dialog
+- [x] Include categories: Drip Edge, Walk Pads, Coping, Gutter, Roofing Field
+- [x] Add "Other" option that shows text input for custom categories
+- [x] Make dropdown the default input method
