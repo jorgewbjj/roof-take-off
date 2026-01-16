@@ -681,7 +681,7 @@ export default function MeasurementCanvas() {
     }
 
     // Edit mode: select measurement
-    if (isEditMode && !isPanning) {
+    if (isEditMode) {
       const normalizedX = x / zoomLevel;
       const normalizedY = y / zoomLevel;
       
@@ -700,7 +700,7 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    if (!isDrawing || isPanning) return;
+    if (!isDrawing) return;
 
     // Check if clicking near the first point to auto-close shape
     if (currentPolygon.length >= 3) {
@@ -977,7 +977,7 @@ export default function MeasurementCanvas() {
               className="absolute top-0 left-0"
               style={{ 
                 pointerEvents: "auto",
-                cursor: isDrawing ? "none" : (isPanning ? "grabbing" : "grab")
+                cursor: isPanning ? "grabbing" : (isDrawing ? "none" : "grab")
               }}
             />
           </div>

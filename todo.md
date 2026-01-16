@@ -199,3 +199,8 @@
 - [x] Change zoom increment from 10% to 1% for smoother control
 - [x] Update scroll wheel zoom increment - Changed from 0.1 to 0.01
 - [x] Update zoom in/out button increment - Changed from 0.1 to 0.01
+
+## Panning During Drawing
+- [x] Enable middle mouse button (scroll wheel click) for panning
+- [x] Allow panning while in drawing mode without interrupting measurement
+- [x] Update cursor to indicate pan mode when middle button is held - Shows grabbing cursor
