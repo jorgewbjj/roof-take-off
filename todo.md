@@ -188,3 +188,9 @@
 - [x] Include categories: Drip Edge, Walk Pads, Coping, Gutter, Roofing Field
 - [x] Add "Other" option that shows text input for custom categories
 - [x] Make dropdown the default input method
+
+## Category Layer Visibility
+- [x] Add eye icon toggle button to each category header
+- [x] Track visibility state per category name using Set
+- [x] Hide/show measurements on canvas based on category visibility
+- [x] Persist visibility state during session

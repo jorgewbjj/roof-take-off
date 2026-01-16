@@ -7,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -55,6 +55,7 @@ export default function MeasurementCanvas() {
   const [measurementName, setMeasurementName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Drip Edge");
   const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -273,6 +274,9 @@ export default function MeasurementCanvas() {
 
     // Draw saved measurements (scale coordinates with zoom level)
     measurements?.forEach((measurement) => {
+      // Skip hidden categories
+      if (hiddenCategories.has(measurement.name)) return;
+      
       const coords = measurement.coordinates as Point[];
       if (coords.length < 2) return;
 
@@ -532,7 +536,7 @@ export default function MeasurementCanvas() {
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories]);
 
   // Zoom controls
   const handleZoomIn = () => {
@@ -1275,17 +1279,43 @@ export default function MeasurementCanvas() {
                           <div key={categoryName} className="border border-border rounded-lg overflow-hidden">
                             {/* Category Header */}
                             <div className="bg-accent/30 px-3 py-2 border-b border-border">
-                              <div className="flex items-center justify-between">
-                                <p className="font-semibold text-sm">{categoryName}</p>
-                                {hasLines && (
-                                  <p className="text-xs font-medium text-primary">
-                                    Total: {totalLinearFt.toFixed(2)} {scaleUnit}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex-1">
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-semibold text-sm">{categoryName}</p>
+                                    {hasLines && (
+                                      <p className="text-xs font-medium text-primary">
+                                        Total: {totalLinearFt.toFixed(2)} {scaleUnit}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-0.5">
+                                    {items.length} measurement{items.length === 1 ? '' : 's'}
                                   </p>
-                                )}
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 shrink-0"
+                                  onClick={() => {
+                                    setHiddenCategories(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(categoryName)) {
+                                        next.delete(categoryName);
+                                      } else {
+                                        next.add(categoryName);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  {hiddenCategories.has(categoryName) ? (
+                                    <EyeOff className="w-4 h-4 text-muted-foreground" />
+                                  ) : (
+                                    <Eye className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </Button>
                               </div>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {items.length} measurement{items.length === 1 ? '' : 's'}
-                              </p>
                             </div>
                             
                             {/* Category Items */}
