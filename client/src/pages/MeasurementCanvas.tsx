@@ -343,7 +343,8 @@ export default function MeasurementCanvas() {
 
           // Draw distance label on each line
           if (i < scaledPolygon.length - 1) {
-            const distance = calculateDistance(p1, p2);
+            // Use normalized coordinates for distance calculation
+            const distance = calculateDistance(currentPolygon[i], currentPolygon[i + 1]);
             const midX = (p1.x + p2.x) / 2;
             const midY = (p1.y + p2.y) / 2;
             
@@ -370,8 +371,10 @@ export default function MeasurementCanvas() {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Show distance for preview line
-        const distance = calculateDistance(lastPoint, cursorPosition);
+        // Show distance for preview line (convert scaled coords to normalized)
+        const lastPointNormalized = currentPolygon[currentPolygon.length - 1];
+        const cursorNormalized = { x: cursorPosition.x / zoomLevel, y: cursorPosition.y / zoomLevel };
+        const distance = calculateDistance(lastPointNormalized, cursorNormalized);
         const midX = (lastPoint.x + cursorPosition.x) / 2;
         const midY = (lastPoint.y + cursorPosition.y) / 2;
         ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
@@ -439,8 +442,9 @@ export default function MeasurementCanvas() {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Show distance
-        const distance = calculateDistance(scaledPoints[0], cursorPosition);
+        // Show distance (use normalized coordinates)
+        const cursorNormalized = { x: cursorPosition.x / zoomLevel, y: cursorPosition.y / zoomLevel };
+        const distance = calculateDistance(calibrationPoints[0], cursorNormalized);
         const midX = (scaledPoints[0].x + cursorPosition.x) / 2;
         const midY = (scaledPoints[0].y + cursorPosition.y) / 2;
         ctx.fillStyle = "rgba(59, 130, 246, 0.9)";

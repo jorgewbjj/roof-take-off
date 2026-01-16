@@ -154,6 +154,6 @@
 - [x] Remove meters from default options unless explicitly changed - Meters only appear when user selects them
 
 ## Calibration Verification Bug
-- [x] Fix calibration - marking a line after calibration doesn't return the calibrated value
-- [x] Debug the relationship between calibration and line measurement calculations - Fixed coordinate system mismatch in exact measurement mode
-- [x] Ensure calibrated scale is properly applied to all measurement types - All calculations now use normalized coordinates consistently
+- [x] Fix calibration - saved measurements now match calibrated distance
+- [x] Fix real-time preview distance display while moving mouse - Now uses normalized coordinates
+- [x] Ensure preview distance uses same calculation as saved measurements - All distance calculations consistent
