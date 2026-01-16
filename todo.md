@@ -204,3 +204,8 @@
 - [x] Fix middle mouse button panning - not working during drawing mode
 - [x] Debug why panning doesn't activate when drawing - Fixed else-if blocking panning
 - [x] Test and verify panning works while measuring - Both actions now independent
+
+## Scroll Behavior Fix
+- [x] Prevent page scrolling when mouse is over PDF canvas
+- [x] Allow scrolling only in the sidebar area
+- [x] Keep zoom functionality working with mouse wheel over canvas

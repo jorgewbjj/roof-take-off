@@ -915,7 +915,15 @@ export default function MeasurementCanvas() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas Area */}
-        <div className="flex-1 overflow-auto p-6" ref={containerRef}>
+        <div 
+          className="flex-1 overflow-auto p-6" 
+          ref={containerRef}
+          onWheel={(e) => {
+            // Prevent page scrolling when mouse is over canvas area
+            // The canvas itself handles zoom via its own onWheel handler
+            e.preventDefault();
+          }}
+        >
           <div 
             className="relative inline-block"
             style={{
