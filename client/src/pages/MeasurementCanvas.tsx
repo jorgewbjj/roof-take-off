@@ -215,7 +215,18 @@ export default function MeasurementCanvas() {
     return inchDistance * scale;
   };
 
-  // Calculate perimeter for a polygon (total edge length)
+  // Calculate total length of a polyline (open path - no closing segment)
+  const calculatePolylineLength = (points: Point[]) => {
+    if (points.length < 2) return 0;
+    
+    let length = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      length += calculateDistance(points[i], points[i + 1]);
+    }
+    return length;
+  };
+
+  // Calculate perimeter for a polygon (closed path - includes closing segment)
   const calculatePerimeter = (points: Point[]) => {
     if (points.length < 2) return 0;
     
@@ -760,8 +771,8 @@ export default function MeasurementCanvas() {
     let perimeter: number | undefined;
     
     if (currentPolygon.length === 2 || !isShapeClosed) {
-      // Line measurement: calculate total polyline length
-      area = calculatePerimeter(currentPolygon);
+      // Line measurement: calculate total polyline length (open path)
+      area = calculatePolylineLength(currentPolygon);
       perimeter = undefined;
     } else {
       // Area measurement: calculate area and perimeter
@@ -1296,7 +1307,7 @@ export default function MeasurementCanvas() {
             <DialogTitle>Name This Measurement</DialogTitle>
             <DialogDescription>
               {currentPolygon.length === 2 || !isShapeClosed ? (
-                <>Distance: {calculatePerimeter(currentPolygon).toFixed(2)} {scaleUnit}</>
+                <>Distance: {calculatePolylineLength(currentPolygon).toFixed(2)} {scaleUnit}</>
               ) : (
                 <div className="space-y-1">
                   <div>Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²</div>

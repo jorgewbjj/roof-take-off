@@ -165,3 +165,8 @@
 - [x] Update Escape key to save current polyline as line measurement
 - [x] Fix rendering: line measurements showing as closed filled shapes
 - [x] Render line measurements as open polylines without fill - Check perimeter field to distinguish
+
+## Distance Calculation Bug
+- [x] Fix distance doubling issue - 20ft measurement saving as 40ft
+- [x] Check if calculatePerimeter is counting segments twice - Created separate calculatePolylineLength
+- [x] Verify polyline distance calculation logic - Lines use open path, areas use closed path
