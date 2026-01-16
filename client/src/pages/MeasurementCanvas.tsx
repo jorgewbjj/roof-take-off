@@ -38,7 +38,7 @@ export default function MeasurementCanvas() {
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);
-  const [scaleUnit, setScaleUnit] = useState("ft");
+  const [scaleUnit, setScaleUnit] = useState("feet");
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPolygon, setCurrentPolygon] = useState<Point[]>([]);
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
@@ -177,8 +177,8 @@ export default function MeasurementCanvas() {
   // Add keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape key to complete drawing
-      if (e.key === 'Escape' && isDrawing && currentPolygon.length >= 3) {
+      // Escape key to complete drawing (2+ points for line, 3+ for area)
+      if (e.key === 'Escape' && isDrawing && currentPolygon.length >= 2) {
         e.preventDefault();
         setIsNameDialogOpen(true);
       }
@@ -697,7 +697,17 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    const area = calculateArea(currentPolygon);
+    // For line measurements (2 points), store distance as area
+    // For area measurements (3+ points), calculate actual area
+    let area: number;
+    if (currentPolygon.length === 2) {
+      // Line measurement: store distance
+      area = calculateDistance(currentPolygon[0], currentPolygon[1]);
+    } else {
+      // Area measurement: calculate area
+      area = calculateArea(currentPolygon);
+    }
+
     createMeasurementMutation.mutate({
       projectId,
       name: measurementName,
@@ -1161,7 +1171,11 @@ export default function MeasurementCanvas() {
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm truncate">{measurement.name}</p>
                             <p className="text-xs text-muted-foreground">
-                              {measurement.area} {scaleUnit}²
+                              {(measurement.coordinates as Point[]).length === 2 ? (
+                                <>{measurement.area} {scaleUnit}</>
+                              ) : (
+                                <>{measurement.area} {scaleUnit}²</>
+                              )}
                             </p>
                           </div>
                         </div>
@@ -1214,7 +1228,11 @@ export default function MeasurementCanvas() {
           <DialogHeader>
             <DialogTitle>Name This Measurement</DialogTitle>
             <DialogDescription>
-              Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²
+              {currentPolygon.length === 2 ? (
+                <>Distance: {calculateDistance(currentPolygon[0], currentPolygon[1]).toFixed(2)} {scaleUnit}</>
+              ) : (
+                <>Area: {calculateArea(currentPolygon).toFixed(2)} {scaleUnit}²</>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

@@ -125,3 +125,11 @@
 - [x] Debug why button 1 check isn't triggering (onClick was interfering)
 - [x] Added onAuxClick to prevent middle button from triggering onClick
 - [x] Filter onClick to only handle left button (button 0)
+
+## Line Measurements & Default Unit
+- [x] Set feet as the default measurement unit
+- [x] Allow 2-point line measurements (not just shapes)
+- [x] Save line measurement when pressing Escape with 2 points
+- [x] Display line length in measurement list (without ² symbol)
+- [x] Store line measurements in database (distance stored in area field)
+- [x] Render line measurements differently from area measurements in UI
