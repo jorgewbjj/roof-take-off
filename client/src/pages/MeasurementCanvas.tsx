@@ -581,20 +581,23 @@ export default function MeasurementCanvas() {
     const mouseX = clientX !== undefined ? clientX - rect.left : rect.width / 2;
     const mouseY = clientY !== undefined ? clientY - rect.top : rect.height / 2;
 
-    // Calculate the point in canvas coordinates before zoom
-    const beforeX = (mouseX - panOffset.x) / zoomLevel;
-    const beforeY = (mouseY - panOffset.y) / zoomLevel;
+    // Use functional updates to avoid stale closures
+    setZoomLevel(prevZoom => {
+      setPanOffset(prevOffset => {
+        // Calculate the point in canvas coordinates before zoom
+        const beforeX = (mouseX - prevOffset.x) / prevZoom;
+        const beforeY = (mouseY - prevOffset.y) / prevZoom;
 
-    // Update zoom
-    setZoomLevel(newZoom);
+        // Calculate new pan offset to keep the point under the cursor
+        const afterX = beforeX * newZoom;
+        const afterY = beforeY * newZoom;
 
-    // Calculate new pan offset to keep the point under the cursor
-    const afterX = beforeX * newZoom;
-    const afterY = beforeY * newZoom;
-
-    setPanOffset({
-      x: mouseX - afterX,
-      y: mouseY - afterY
+        return {
+          x: mouseX - afterX,
+          y: mouseY - afterY
+        };
+      });
+      return newZoom;
     });
   };
 
@@ -936,8 +939,9 @@ export default function MeasurementCanvas() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
+      <header className="border-b border-border bg-card">
+        {/* Top Row - Project Name and Export */}
+        <div className="px-6 py-3 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/projects")}>
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -949,7 +953,7 @@ export default function MeasurementCanvas() {
                 <Input
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  className="w-64"
+                  className="w-64 h-8"
                 />
                 <Button
                   size="sm"
@@ -960,7 +964,7 @@ export default function MeasurementCanvas() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold text-foreground">{project.name}</h1>
+                <h1 className="text-lg font-semibold text-foreground">{project.name}</h1>
                 <Button variant="ghost" size="sm" onClick={() => setEditingProjectName(true)}>
                   <Edit2 className="w-4 h-4" />
                 </Button>
@@ -971,6 +975,147 @@ export default function MeasurementCanvas() {
             <Download className="w-4 h-4" />
             Export
           </Button>
+        </div>
+
+        {/* Bottom Row - Toolbar with all controls */}
+        <div className="px-6 py-2 flex items-center gap-6 flex-wrap">
+          {/* Drawing Tools */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Tools:</span>
+            <Button
+              variant={isDrawing ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setIsDrawing(!isDrawing);
+                setIsEditMode(false);
+                setIsExactMode(false);
+                if (isDrawing) setCurrentPolygon([]);
+              }}
+            >
+              {isDrawing ? "Stop Drawing" : "Draw"}
+            </Button>
+            <Button
+              variant={isEditMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                setIsEditMode(!isEditMode);
+                setIsDrawing(false);
+                setIsExactMode(false);
+                setSelectedMeasurementId(null);
+              }}
+            >
+              {isEditMode ? "Stop Edit" : "Edit"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCalibrating(true)}
+            >
+              Calibrate
+            </Button>
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Zoom:</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleZoomOut}
+              disabled={zoomLevel <= 0.1}
+            >
+              <ZoomOut className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-mono w-12 text-center">{(zoomLevel * 100).toFixed(0)}%</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleZoomIn}
+              disabled={zoomLevel >= 4.0}
+            >
+              <ZoomIn className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleZoomReset}
+            >
+              <RotateCcw className="w-4 h-4" />
+            </Button>
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Scale Settings */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-muted-foreground">Scale:</span>
+            <Input
+              type="number"
+              value={scale}
+              onChange={(e) => setScale(parseFloat(e.target.value) || 1.0)}
+              className="w-20 h-8"
+              step="0.1"
+            />
+            <Select value={scaleUnit} onValueChange={setScaleUnit}>
+              <SelectTrigger className="w-20 h-8">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="feet">ft</SelectItem>
+                <SelectItem value="meters">m</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-sm text-muted-foreground">per inch</span>
+          </div>
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Color Picker */}
+          {isDrawing && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Color:</span>
+              <div className="flex gap-1">
+                {PRESET_COLORS.slice(0, 5).map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setSelectedColor(color)}
+                    className={`w-6 h-6 rounded border-2 transition-all ${
+                      selectedColor === color ? "border-foreground scale-110" : "border-border"
+                    }`}
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Exact Mode Toggle */}
+          {isDrawing && (
+            <>
+              <Separator orientation="vertical" className="h-6" />
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-muted-foreground">Exact:</span>
+                <Button
+                  variant={isExactMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setIsExactMode(!isExactMode)}
+                >
+                  {isExactMode ? "On" : "Off"}
+                </Button>
+                {isExactMode && (
+                  <Input
+                    type="number"
+                    placeholder="Distance"
+                    value={exactDistance}
+                    onChange={(e) => setExactDistance(e.target.value)}
+                    className="w-24 h-8"
+                  />
+                )}
+              </div>
+            </>
+          )}
         </div>
       </header>
 
@@ -1058,224 +1203,11 @@ export default function MeasurementCanvas() {
 
         {/* Sidebar */}
         <div className="w-80 border-l border-border bg-card overflow-y-auto flex-shrink-0">
-          <div className="p-6 space-y-6">
-            {/* Drawing Tools */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Drawing Tools</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant={isDrawing ? "default" : "outline"}
-                    onClick={() => {
-                      setIsDrawing(!isDrawing);
-                      setIsEditMode(false);
-                      setIsExactMode(false);
-                      if (isDrawing) setCurrentPolygon([]);
-                    }}
-                  >
-                    {isDrawing ? "Stop Drawing" : "Start Drawing"}
-                  </Button>
-                  <Button
-                    variant={isEditMode ? "default" : "outline"}
-                    onClick={() => {
-                      setIsEditMode(!isEditMode);
-                      setIsDrawing(false);
-                      setIsExactMode(false);
-                      setSelectedMeasurementId(null);
-                    }}
-                  >
-                    {isEditMode ? "Stop Editing" : "Edit Mode"}
-                  </Button>
-                </div>
-                {isDrawing && currentPolygon.length >= 3 && (
-                  <Button onClick={completePolygon} className="w-full gap-2">
-                    <Plus className="w-4 h-4" />
-                    Complete Shape
-                  </Button>
-                )}
-
-                {/* Exact Measurement Input */}
-                {isDrawing && (
-                  <div className="space-y-2 p-3 bg-accent/30 rounded-lg border border-border">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-semibold">Exact Distance Mode</Label>
-                      <Button
-                        variant={isExactMode ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setIsExactMode(!isExactMode)}
-                      >
-                        {isExactMode ? "On" : "Off"}
-                      </Button>
-                    </div>
-                    {isExactMode && (
-                      <div className="space-y-1">
-                        <Input
-                          type="number"
-                          placeholder="Enter distance"
-                          value={exactDistance}
-                          onChange={(e) => setExactDistance(e.target.value)}
-                          className="h-8"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Type distance, then click to place line at desired angle
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label>Color</Label>
-                  <div className="grid grid-cols-5 gap-2">
-                    {PRESET_COLORS.map((color) => (
-                      <button
-                        key={color}
-                        onClick={() => setSelectedColor(color)}
-                        className={`w-10 h-10 rounded-md border-2 transition-all ${
-                          selectedColor === color ? "border-foreground scale-110" : "border-border"
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Zoom Controls */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Zoom Controls</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleZoomOut}
-                    disabled={zoomLevel <= 0.1}
-                    className="flex-1 gap-1"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                    Out
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleZoomReset}
-                    className="flex-1 gap-1"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    Reset
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleZoomIn}
-                    disabled={zoomLevel >= 4.0}
-                    className="flex-1 gap-1"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                    In
-                  </Button>
-                </div>
-                <div className="text-center text-sm text-muted-foreground">
-                  Zoom: {(zoomLevel * 100).toFixed(0)}%
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Use mouse wheel to zoom in/out
-                </p>
-              </CardContent>
-            </Card>
-
-            {/* Scale Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Scale Settings</CardTitle>
-                <CardDescription className="text-xs">Set the drawing scale (e.g., 1 inch = 20 feet)</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="scale" className="text-sm">1 inch =</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="scale"
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      value={scale}
-                      onChange={(e) => setScale(parseFloat(e.target.value) || 1)}
-                      className="flex-1"
-                    />
-                    <span className="text-sm font-medium">{scaleUnit}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Example: If 1 inch on PDF = 20 feet in reality, enter 20
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="unit" className="text-sm">Unit</Label>
-                  <select
-                    id="unit"
-                    value={scaleUnit}
-                    onChange={(e) => setScaleUnit(e.target.value)}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="ft">Feet (ft)</option>
-                    <option value="m">Meters (m)</option>
-                    <option value="in">Inches (in)</option>
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Button
-                    variant={isCalibrating ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      if (isCalibrating) {
-                        // Cancel calibration
-                        setIsCalibrating(false);
-                        setCalibrationPoints([]);
-                      } else {
-                        // Start calibration
-                        setIsCalibrating(true);
-                        setCalibrationPoints([]);
-                        setIsDrawing(false);
-                        setIsEditMode(false);
-                        setIsExactMode(false);
-                      }
-                    }}
-                    className="w-full"
-                  >
-                    {isCalibrating ? "Cancel Calibration" : "Calibrate Scale"}
-                  </Button>
-                  {isCalibrating && (
-                    <p className="text-xs text-muted-foreground">
-                      Click two points on a known distance in the PDF
-                    </p>
-                  )}
-                </div>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    updateProjectMutation.mutate({
-                      id: projectId,
-                      scale: scale.toString(),
-                      scaleUnit,
-                    })
-                  }
-                  className="w-full"
-                >
-                  Save Scale
-                </Button>
-              </CardContent>
-            </Card>
-
+          <div className="p-4 space-y-4">
             {/* Area Totals Summary */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Area Summary</CardTitle>
+                <CardTitle className="text-sm font-semibold">Summary</CardTitle>
               </CardHeader>
               <CardContent>
                 {measurements && measurements.length > 0 ? (

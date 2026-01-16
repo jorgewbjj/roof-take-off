@@ -222,3 +222,12 @@
 - [x] Implement cursor-focused zoom (zoom centered on mouse position)
 - [x] Update zoom in/out to maintain cursor position as zoom center - Uses zoomAtPoint function
 - [x] Update scroll wheel zoom to center on cursor - Passes clientX/clientY to zoomAtPoint
+
+## Zoom Smoothness and Layout Improvements
+- [x] Fix cursor-focused zoom smoothness issue - Used functional setState to avoid stale closure
+- [x] Debug pan offset calculation during zoom - Fixed with prevPanOffset reference
+- [x] Move scale controls to top header - Compact toolbar with all controls
+- [x] Move zoom controls to top header - Horizontal button layout
+- [x] Move drawing tools to top header - Minimalist design
+- [x] Keep only measurements list in right sidebar - Removed all control cards
+- [x] Make layout minimalist to maximize canvas space - Clean professional interface
