@@ -343,37 +343,33 @@ export default function MeasurementCanvas() {
         y: p.y * zoomLevel
       }));
 
-      // Draw lines between points
+      // Draw lines between points (open polyline - no closing segment)
       ctx.strokeStyle = selectedColor;
       ctx.lineWidth = 2;
       ctx.setLineDash([]);
 
-      for (let i = 0; i < scaledPolygon.length; i++) {
+      // Only draw segments between consecutive points (no wrap-around)
+      for (let i = 0; i < scaledPolygon.length - 1; i++) {
         const p1 = scaledPolygon[i];
-        const p2 = scaledPolygon[(i + 1) % scaledPolygon.length];
+        const p2 = scaledPolygon[i + 1];
         
-        if (i < scaledPolygon.length - 1 || scaledPolygon.length >= 3) {
-          ctx.beginPath();
-          ctx.moveTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
 
-          // Draw distance label on each line
-          if (i < scaledPolygon.length - 1) {
-            // Use normalized coordinates for distance calculation
-            const distance = calculateDistance(currentPolygon[i], currentPolygon[i + 1]);
-            const midX = (p1.x + p2.x) / 2;
-            const midY = (p1.y + p2.y) / 2;
-            
-            ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-            ctx.fillRect(midX - 30, midY - 12, 60, 20);
-            ctx.fillStyle = "#fff";
-            ctx.font = "11px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
-          }
-        }
+        // Draw distance label on each segment
+        const distance = calculateDistance(currentPolygon[i], currentPolygon[i + 1]);
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2;
+        
+        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.fillRect(midX - 30, midY - 12, 60, 20);
+        ctx.fillStyle = "#fff";
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
       }
 
       // Draw preview line from last point to cursor

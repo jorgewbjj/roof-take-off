@@ -170,3 +170,8 @@
 - [x] Fix distance doubling issue - 20ft measurement saving as 40ft
 - [x] Check if calculatePerimeter is counting segments twice - Created separate calculatePolylineLength
 - [x] Verify polyline distance calculation logic - Lines use open path, areas use closed path
+
+## Drawing Preview Bug
+- [x] Fix preview showing closed filled triangle while drawing
+- [x] Remove fill and closing path from drawing preview - Only draw consecutive segments
+- [x] Only show closed shape when explicitly closed (clicked first point)
