@@ -63,6 +63,7 @@ export default function MeasurementCanvas() {
   const [selectedCategory, setSelectedCategory] = useState<string>("Drip Edge");
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
+  const [hiddenMeasurements, setHiddenMeasurements] = useState<Set<number>>(new Set());
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -312,8 +313,8 @@ export default function MeasurementCanvas() {
 
     // Draw saved measurements (scale coordinates with zoom level)
     measurements?.forEach((measurement) => {
-      // Skip hidden categories
-      if (hiddenCategories.has(measurement.name)) return;
+      // Skip hidden categories or individual hidden measurements
+      if (hiddenCategories.has(measurement.name) || hiddenMeasurements.has(measurement.id)) return;
       
       const coords = measurement.coordinates as Point[];
       if (coords.length < 2) return;
@@ -1514,8 +1515,9 @@ export default function MeasurementCanvas() {
                             
                             {/* Category Items */}
                             <div className="divide-y divide-border">
-                              {items.map((measurement) => {
+                              {items.map((measurement, index) => {
                                 const isLine = measurement.perimeter === null || measurement.perimeter === undefined;
+                                const isPoint = measurement.type === 'point';
                                 return (
                                   <div
                                     key={measurement.id}
@@ -1528,7 +1530,11 @@ export default function MeasurementCanvas() {
                                       />
                                       <div className="flex-1 min-w-0">
                                         <div className="text-xs text-muted-foreground">
-                                          {isLine ? (
+                                          {isPoint ? (
+                                            <div className="flex items-center gap-1.5">
+                                              <span>Marker #{index + 1}</span>
+                                            </div>
+                                          ) : isLine ? (
                                             <div>{measurement.area} {scaleUnit}</div>
                                           ) : (
                                             <>
@@ -1541,18 +1547,42 @@ export default function MeasurementCanvas() {
                                         </div>
                                       </div>
                                     </div>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-7 w-7 p-0"
-                                      onClick={() => {
-                                        if (confirm("Delete this measurement?")) {
-                                          deleteMeasurementMutation.mutate({ id: measurement.id });
-                                        }
-                                      }}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                                    </Button>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={() => {
+                                          setHiddenMeasurements(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(measurement.id)) {
+                                              next.delete(measurement.id);
+                                            } else {
+                                              next.add(measurement.id);
+                                            }
+                                            return next;
+                                          });
+                                        }}
+                                      >
+                                        {hiddenMeasurements.has(measurement.id) ? (
+                                          <EyeOff className="w-3.5 h-3.5 text-muted-foreground" />
+                                        ) : (
+                                          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                                        )}
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={() => {
+                                          if (confirm("Delete this measurement?")) {
+                                            deleteMeasurementMutation.mutate({ id: measurement.id });
+                                          }
+                                        }}
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                                      </Button>
+                                    </div>
                                   </div>
                                 );
                               })}

@@ -275,3 +275,11 @@
 - [x] After selecting category, enter counting mode (same as Draw with point category)
 - [x] Show visual feedback that counting mode is active
 - [x] Ensure all existing features continue to work
+
+## Visible Count Markers Feature
+- [x] Show visible markers on canvas where each count item was clicked
+- [x] Use same style as area/line measurements (colored circles with X)
+- [x] Add individual count markers to measurements list in sidebar
+- [x] Integrate count markers into layer visibility system (eye icon to hide/show)
+- [x] Ensure markers can be individually deleted like other measurements
+- [x] Verify all existing features continue to work
