@@ -267,3 +267,11 @@
 - [x] Update PDF export to include point counts (e.g., "Curbs: 20 items")
 - [x] Ensure all existing features (area, line measurements) continue to work
 - [x] Test drawing, editing, calibration, zoom, and export with point measurements
+
+## Count Button Feature
+- [x] Add "Count" button next to Draw button in toolbar
+- [x] Clicking Count opens category selector dialog
+- [x] Show only counting categories (Curbs, Pipes, Other) in dialog
+- [x] After selecting category, enter counting mode (same as Draw with point category)
+- [x] Show visual feedback that counting mode is active
+- [x] Ensure all existing features continue to work

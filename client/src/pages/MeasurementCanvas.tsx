@@ -81,6 +81,8 @@ export default function MeasurementCanvas() {
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
   const [calibrationDistance, setCalibrationDistance] = useState("");
+  const [isCountingMode, setIsCountingMode] = useState(false);
+  const [showCountCategoryDialog, setShowCountCategoryDialog] = useState(false);
   const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
   const [isShapeClosed, setIsShapeClosed] = useState(false); // Track if user clicked first point to close shape
   const baseScale = 2.5; // High quality PDF rendering base scale
@@ -1122,10 +1124,27 @@ export default function MeasurementCanvas() {
                 setIsDrawing(!isDrawing);
                 setIsEditMode(false);
                 setIsExactMode(false);
+                setIsCountingMode(false);
                 if (isDrawing) setCurrentPolygon([]);
               }}
             >
               {isDrawing ? "Stop Drawing" : "Draw"}
+            </Button>
+            <Button
+              variant={isCountingMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (isCountingMode) {
+                  // Stop counting
+                  setIsCountingMode(false);
+                  setIsDrawing(false);
+                } else {
+                  // Show category selection dialog
+                  setShowCountCategoryDialog(true);
+                }
+              }}
+            >
+              {isCountingMode ? "Stop Counting" : "Count"}
             </Button>
             <Button
               variant={isEditMode ? "default" : "outline"}
@@ -1133,6 +1152,7 @@ export default function MeasurementCanvas() {
               onClick={() => {
                 setIsEditMode(!isEditMode);
                 setIsDrawing(false);
+                setIsCountingMode(false);
                 setIsExactMode(false);
                 setSelectedMeasurementId(null);
               }}
@@ -1640,6 +1660,81 @@ export default function MeasurementCanvas() {
             <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending}>
               {createMeasurementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Count Category Selection Dialog */}
+      <Dialog open={showCountCategoryDialog} onOpenChange={setShowCountCategoryDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Select Counting Category</DialogTitle>
+            <DialogDescription>
+              Choose what you want to count (e.g., Curbs, Pipes). Each click will place a marker.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="count-category-select">Category</Label>
+              <Select
+                value={isCustomCategory ? "Other" : selectedCategory}
+                onValueChange={(value) => {
+                  if (value === "Other") {
+                    setIsCustomCategory(true);
+                    setSelectedCategory("");
+                    setMeasurementName("");
+                  } else {
+                    setIsCustomCategory(false);
+                    setSelectedCategory(value);
+                    setMeasurementName(value);
+                  }
+                }}
+              >
+                <SelectTrigger id="count-category-select">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {POINT_COUNT_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="Other">Other (Custom)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {isCustomCategory && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-count-name">Custom Category Name</Label>
+                <Input
+                  id="custom-count-name"
+                  value={measurementName}
+                  onChange={(e) => setMeasurementName(e.target.value)}
+                  placeholder="Enter custom category name"
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setShowCountCategoryDialog(false);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={() => {
+              if (isCustomCategory && !measurementName.trim()) {
+                return; // Don't start if custom name is empty
+              }
+              setShowCountCategoryDialog(false);
+              setIsCountingMode(true);
+              setIsDrawing(true); // Enable drawing mode for point counting
+              setIsEditMode(false);
+              setIsExactMode(false);
+            }} disabled={isCustomCategory && !measurementName.trim()}>
+              Start Counting
             </Button>
           </DialogFooter>
         </DialogContent>
