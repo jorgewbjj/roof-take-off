@@ -255,3 +255,15 @@
 - [x] Investigate PDFThumbnail component rendering issue
 - [x] Ensure thumbnails load correctly for all projects
 - [x] Verify everything else remains unchanged
+
+## Point Counting Feature
+- [x] Add new measurement type: "point" for counting items
+- [x] Update database schema to support point measurements (count field)
+- [x] Add "Curbs" category as point measurement type
+- [x] Add "Pipes" category as point measurement type
+- [x] Implement click-to-place-marker functionality in Draw mode
+- [x] Display count total for each point category (e.g., "20 curbs")
+- [x] Update CSV export to include point counts
+- [x] Update PDF export to include point counts (e.g., "Curbs: 20 items")
+- [x] Ensure all existing features (area, line measurements) continue to work
+- [x] Test drawing, editing, calibration, zoom, and export with point measurements

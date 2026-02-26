@@ -34,8 +34,13 @@ const PRESET_CATEGORIES = [
   "Coping",
   "Gutter",
   "Roofing Field",
+  "Curbs",
+  "Pipes",
   "Other"
 ];
+
+// Categories that use point counting (click to place markers)
+const POINT_COUNT_CATEGORIES = ["Curbs", "Pipes"];
 
 export default function MeasurementCanvas() {
   const { id } = useParams<{ id: string }>();
@@ -318,11 +323,36 @@ export default function MeasurementCanvas() {
       }));
 
       const isSelected = isEditMode && selectedMeasurementId === measurement.id;
-      // Line measurement: perimeter is undefined (only distance stored in area field)
-      // Area measurement: perimeter has a value
-      const isLine = measurement.perimeter === null || measurement.perimeter === undefined;
+      
+      // Check measurement type
+      const isPoint = measurement.type === 'point' || (measurement.count !== null && measurement.count !== undefined);
+      const isLine = !isPoint && (measurement.perimeter === null || measurement.perimeter === undefined);
 
-      if (isLine) {
+      if (isPoint) {
+        // Draw point marker (small circle with X)
+        const point = scaledCoords[0]; // Point measurements have single coordinate
+        const markerSize = isSelected ? 12 : 8;
+        
+        // Draw outer circle
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, markerSize, 0, Math.PI * 2);
+        ctx.fillStyle = measurement.color + (isSelected ? "80" : "60");
+        ctx.fill();
+        ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
+        ctx.lineWidth = isSelected ? 3 : 2;
+        ctx.stroke();
+        
+        // Draw X mark inside
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        const offset = markerSize * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(point.x - offset, point.y - offset);
+        ctx.lineTo(point.x + offset, point.y + offset);
+        ctx.moveTo(point.x + offset, point.y - offset);
+        ctx.lineTo(point.x - offset, point.y + offset);
+        ctx.stroke();
+      } else if (isLine) {
         // Draw line measurement (polyline - no fill, no closing)
         ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
         ctx.lineWidth = isSelected ? 4 : 3;
@@ -738,6 +768,30 @@ export default function MeasurementCanvas() {
 
     if (!isDrawing) return;
 
+    // Point counting mode for Curbs and Pipes: each click places a marker
+    const isPointCountingMode = POINT_COUNT_CATEGORIES.includes(selectedCategory || measurementName);
+    if (isPointCountingMode) {
+      const normalizedX = x / zoomLevel;
+      const normalizedY = y / zoomLevel;
+      const point = { x: normalizedX, y: normalizedY };
+      
+      // Immediately save this point as a measurement
+      const categoryName = selectedCategory || measurementName;
+      createMeasurementMutation.mutate({
+        projectId,
+        name: categoryName,
+        type: 'point',
+        color: selectedColor,
+        area: '0', // Not used for points
+        perimeter: undefined,
+        count: 1,
+        coordinates: [point],
+      });
+      
+      toast.success(`Added ${categoryName} marker`);
+      return;
+    }
+
     // Check if clicking near the first point to auto-close shape
     if (currentPolygon.length >= 3) {
       const firstPoint = currentPolygon[0];
@@ -833,20 +887,24 @@ export default function MeasurementCanvas() {
     // Area: 3+ points AND shape explicitly closed (clicked first point)
     let area: number;
     let perimeter: number | undefined;
+    let type: 'area' | 'line' | 'point';
     
     if (currentPolygon.length === 2 || !isShapeClosed) {
       // Line measurement: calculate total polyline length (open path)
       area = calculatePolylineLength(currentPolygon);
       perimeter = undefined;
+      type = 'line';
     } else {
       // Area measurement: calculate area and perimeter
       area = calculateArea(currentPolygon);
       perimeter = calculatePerimeter(currentPolygon);
+      type = 'area';
     }
 
     createMeasurementMutation.mutate({
       projectId,
       name: measurementName,
+      type,
       color: selectedColor,
       area: area.toFixed(2),
       perimeter: perimeter ? perimeter.toFixed(2) : undefined,
@@ -892,11 +950,13 @@ export default function MeasurementCanvas() {
     // Categories
     Object.entries(grouped).forEach(([categoryName, items]) => {
       // Calculate totals
-      const lineItems = items.filter(m => m.perimeter === null || m.perimeter === undefined);
-      const areaItems = items.filter(m => m.perimeter !== null && m.perimeter !== undefined);
+      const pointItems = items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined));
+      const lineItems = items.filter(m => m.type !== 'point' && (m.perimeter === null || m.perimeter === undefined));
+      const areaItems = items.filter(m => m.type !== 'point' && m.perimeter !== null && m.perimeter !== undefined);
       
-      const totalLinearFt = lineItems.reduce((sum, m) => sum + parseFloat(m.area), 0);
-      const totalAreaSqFt = areaItems.reduce((sum, m) => sum + parseFloat(m.area), 0);
+      const totalCount = pointItems.length;
+      const totalLinearFt = lineItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
+      const totalAreaSqFt = areaItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
 
       // Check if we need a new page
       if (yPos > 270) {
@@ -913,6 +973,11 @@ export default function MeasurementCanvas() {
       // Totals
       doc.setFontSize(11);
       doc.setFont("helvetica", "normal");
+      
+      if (totalCount > 0) {
+        doc.text(`Count: ${totalCount} item${totalCount === 1 ? '' : 's'}`, margin + 5, yPos);
+        yPos += 7;
+      }
       
       if (totalLinearFt > 0) {
         doc.text(`Total: ${totalLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
@@ -939,15 +1004,21 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    const data = measurements.map((m) => ({
-      name: m.name,
-      area: `${m.area} ${scaleUnit}²`,
-      color: m.color,
-    }));
+    const data = measurements.map((m) => {
+      const isPoint = m.type === 'point' || (m.count !== null && m.count !== undefined);
+      const isLine = !isPoint && (m.perimeter === null || m.perimeter === undefined);
+      
+      return {
+        name: m.name,
+        type: isPoint ? 'Point' : isLine ? 'Line' : 'Area',
+        value: isPoint ? '1 item' : isLine ? `${m.area} ${scaleUnit}` : `${m.area} ${scaleUnit}²`,
+        color: m.color,
+      };
+    });
 
     const csv = [
-      "Name,Area,Color",
-      ...data.map((row) => `"${row.name}","${row.area}","${row.color}"`),
+      "Name,Type,Value,Color",
+      ...data.map((row) => `"${row.name}","${row.type}","${row.value}","${row.color}"`),
     ].join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -1134,6 +1205,29 @@ export default function MeasurementCanvas() {
 
           <Separator orientation="vertical" className="h-6" />
 
+          {/* Category Selector */}
+          {isDrawing && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Category:</span>
+              <Select value={selectedCategory} onValueChange={(value) => {
+                setSelectedCategory(value);
+                setMeasurementName(value);
+                setIsCustomCategory(value === "Other");
+              }}>
+                <SelectTrigger className="w-40 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRESET_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>
+                      {category}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Color Picker */}
           {isDrawing && (
             <div className="flex items-center gap-2">
@@ -1277,7 +1371,7 @@ export default function MeasurementCanvas() {
                     <div className="flex justify-between items-center p-3 rounded-lg bg-primary/10 border border-primary/20">
                       <span className="font-semibold text-sm">Total Area</span>
                       <span className="font-bold text-lg text-primary">
-                        {measurements.reduce((sum, m) => sum + parseFloat(m.area), 0).toFixed(2)} {scaleUnit}²
+                        {measurements.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0).toFixed(2)} {scaleUnit}²
                       </span>
                     </div>
                     <div className="space-y-2">
@@ -1285,7 +1379,7 @@ export default function MeasurementCanvas() {
                       {Object.entries(
                         measurements.reduce((acc, m) => {
                           const color = m.color;
-                          acc[color] = (acc[color] || 0) + parseFloat(m.area);
+                          acc[color] = (acc[color] || 0) + parseFloat(m.area || '0');
                           return acc;
                         }, {} as Record<string, number>)
                       ).map(([color, area]) => (
@@ -1335,10 +1429,18 @@ export default function MeasurementCanvas() {
                       }, {} as Record<string, typeof measurements>);
 
                       return Object.entries(grouped || {}).map(([categoryName, items]) => {
+                        // Check if this is a point counting category
+                        const isPointCategory = items.some(m => m.type === 'point' || (m.count !== null && m.count !== undefined));
+                        
+                        // Calculate total count for point measurements
+                        const totalCount = isPointCategory
+                          ? items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined)).length
+                          : 0;
+                        
                         // Calculate total linear feet for line measurements in this category
                         const totalLinearFt = items
-                          .filter(m => m.perimeter === null || m.perimeter === undefined)
-                          .reduce((sum, m) => sum + parseFloat(m.area), 0);
+                          .filter(m => m.type !== 'point' && (m.perimeter === null || m.perimeter === undefined))
+                          .reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
                         
                         const hasLines = totalLinearFt > 0;
 
@@ -1350,7 +1452,12 @@ export default function MeasurementCanvas() {
                                 <div className="flex-1">
                                   <div className="flex items-center justify-between">
                                     <p className="font-semibold text-sm">{categoryName}</p>
-                                    {hasLines && (
+                                    {isPointCategory && (
+                                      <p className="text-xs font-medium text-primary">
+                                        Count: {totalCount} item{totalCount === 1 ? '' : 's'}
+                                      </p>
+                                    )}
+                                    {!isPointCategory && hasLines && (
                                       <p className="text-xs font-medium text-primary">
                                         Total: {totalLinearFt.toFixed(2)} {scaleUnit}
                                       </p>

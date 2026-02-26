@@ -45,15 +45,18 @@ export type Project = typeof projects.$inferSelect;
 export type InsertProject = typeof projects.$inferInsert;
 
 /**
- * Measurements table - stores individual area measurements for each project
+ * Measurements table - stores area, line, and point measurements for each project
+ * Types: 'area' (polygons), 'line' (linear measurements), 'point' (item counts)
  */
 export const measurements = mysqlTable("measurements", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
+  type: mysqlEnum("type", ["area", "line", "point"]).default("area").notNull(), // Measurement type
   color: varchar("color", { length: 7 }).notNull(), // Hex color code
-  area: decimal("area", { precision: 12, scale: 2 }).notNull(),
-  perimeter: decimal("perimeter", { precision: 12, scale: 2 }), // Total edge length for area measurements
+  area: decimal("area", { precision: 12, scale: 2 }), // For area measurements (nullable)
+  perimeter: decimal("perimeter", { precision: 12, scale: 2 }), // For line measurements or area perimeters
+  count: int("count"), // For point measurements (number of items)
   coordinates: json("coordinates").notNull(), // Array of {x, y} points
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

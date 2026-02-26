@@ -108,9 +108,11 @@ export const appRouter = router({
       .input(z.object({
         projectId: z.number(),
         name: z.string().min(1),
+        type: z.enum(['area', 'line', 'point']).optional(),
         color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-        area: z.string(),
+        area: z.string().optional(),
         perimeter: z.string().optional(),
+        count: z.number().optional(),
         coordinates: z.array(z.object({ x: z.number(), y: z.number() })),
       }))
       .mutation(async ({ input }) => {
