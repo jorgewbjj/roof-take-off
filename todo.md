@@ -343,3 +343,6 @@
 ## Mouse Wheel Behavior
 - [x] Disable page scrolling with mouse wheel except in sidebar
 - [x] Mouse wheel should only zoom canvas in main area
+
+## Zoom Improvements
+- [x] Implement zoom-to-cursor (zoom centers on mouse pointer position)

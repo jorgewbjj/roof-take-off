@@ -678,12 +678,33 @@ export default function MeasurementCanvas() {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  // Handle mouse wheel zoom - keep PDF stable
+  // Handle mouse wheel zoom - zoom to cursor position
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const delta = e.deltaY > 0 ? -0.01 : 0.01;
-    setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
+    
+    const canvas = overlayCanvasRef.current;
+    if (!canvas) return;
+    
+    // Get mouse position relative to canvas
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Calculate zoom delta
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newZoom = Math.max(0.1, Math.min(4.0, zoomLevel + delta));
+    
+    // Calculate the point in PDF coordinates that's under the mouse (before zoom)
+    const pdfX = (mouseX - panOffset.x) / zoomLevel;
+    const pdfY = (mouseY - panOffset.y) / zoomLevel;
+    
+    // Calculate new pan offset to keep the same PDF point under the mouse (after zoom)
+    const newPanX = mouseX - pdfX * newZoom;
+    const newPanY = mouseY - pdfY * newZoom;
+    
+    setZoomLevel(newZoom);
+    setPanOffset({ x: newPanX, y: newPanY });
   };
 
   // Handle mouse down for panning, drawing, or vertex dragging
