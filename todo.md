@@ -326,3 +326,9 @@
 - [x] Preserve expand/collapse state during session
 - [x] Ensure category-level actions (eye icon, delete) still work when collapsed
 - [x] Test with multiple categories and many markers
+
+## Mouse Wheel Zoom Fix
+- [x] Prevent page scroll when mouse wheel is used over canvas
+- [x] Make mouse wheel only zoom in/out on canvas
+- [x] Ensure zoom works smoothly without page scrolling
+- [x] Test in both drawing and counting modes

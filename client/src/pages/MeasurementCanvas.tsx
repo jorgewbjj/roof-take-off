@@ -632,6 +632,7 @@ export default function MeasurementCanvas() {
   // Handle mouse wheel zoom - keep PDF stable
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
+    e.stopPropagation();
     const delta = e.deltaY > 0 ? -0.01 : 0.01;
     setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
   };
@@ -1315,6 +1316,7 @@ export default function MeasurementCanvas() {
             // Prevent page scrolling when mouse is over canvas area
             // The canvas itself handles zoom via its own onWheel handler
             e.preventDefault();
+            e.stopPropagation();
           }}
         >
           <div 
