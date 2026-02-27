@@ -361,3 +361,10 @@
 
 ## Fit-to-Screen Fix
 - [x] Fix PDF clipping when fitting to screen - ensure full PDF is visible
+
+## Wall Category Feature
+- [x] Add "Wall" as a drawing category (linear ft measurement)
+- [x] After drawing a wall, prompt user for wall height
+- [x] Calculate wall area = linear ft × height
+- [x] Show wall area in sidebar measurements list
+- [x] Include wall measurements with area in PDF export

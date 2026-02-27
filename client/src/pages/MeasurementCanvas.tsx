@@ -34,10 +34,14 @@ const PRESET_CATEGORIES = [
   "Coping",
   "Gutter",
   "Roofing Field",
+  "Wall",
   "Curbs",
   "Pipes",
   "Other"
 ];
+
+// Categories that require wall height input after drawing
+const WALL_CATEGORIES = ["Wall"];
 
 // Preset categories that use point counting (click to place markers)
 const PRESET_POINT_COUNT_CATEGORIES = ["Curbs", "Pipes"];
@@ -92,6 +96,14 @@ export default function MeasurementCanvas() {
   const [showCountCategoryDialog, setShowCountCategoryDialog] = useState(false);
   const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
   const [isShapeClosed, setIsShapeClosed] = useState(false); // Track if user clicked first point to close shape
+  const [isWallHeightDialogOpen, setIsWallHeightDialogOpen] = useState(false);
+  const [wallHeight, setWallHeight] = useState("");
+  const [pendingWallMeasurement, setPendingWallMeasurement] = useState<{
+    name: string;
+    color: string;
+    linearFt: number;
+    coordinates: Point[];
+  } | null>(null);
   const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
@@ -1005,6 +1017,22 @@ export default function MeasurementCanvas() {
       type = 'area';
     }
 
+    // If this is a Wall category, intercept and ask for height
+    const categoryName = isCustomCategory ? measurementName : selectedCategory;
+    if (WALL_CATEGORIES.includes(categoryName)) {
+      const linearFt = calculatePolylineLength(currentPolygon);
+      setPendingWallMeasurement({
+        name: measurementName,
+        color: selectedColor,
+        linearFt,
+        coordinates: currentPolygon,
+      });
+      setWallHeight("");
+      setIsNameDialogOpen(false);
+      setIsWallHeightDialogOpen(true);
+      return;
+    }
+
     createMeasurementMutation.mutate({
       projectId,
       name: measurementName,
@@ -1015,6 +1043,31 @@ export default function MeasurementCanvas() {
       coordinates: currentPolygon,
     });
     setIsNameDialogOpen(false);
+  };
+
+  const saveWallMeasurement = () => {
+    if (!pendingWallMeasurement) return;
+    const height = parseFloat(wallHeight);
+    if (isNaN(height) || height <= 0) {
+      toast.error("Please enter a valid wall height");
+      return;
+    }
+    const wallArea = pendingWallMeasurement.linearFt * height;
+    // Store linearFt in perimeter field, wallArea in area field, height in a note via name
+    createMeasurementMutation.mutate({
+      projectId,
+      name: pendingWallMeasurement.name,
+      type: 'line',
+      color: pendingWallMeasurement.color,
+      area: wallArea.toFixed(2),           // wall area = linear ft × height
+      perimeter: pendingWallMeasurement.linearFt.toFixed(2), // linear ft stored in perimeter
+      coordinates: pendingWallMeasurement.coordinates,
+      count: Math.round(height * 100),      // store height × 100 as integer in count field
+    });
+    setIsWallHeightDialogOpen(false);
+    setPendingWallMeasurement(null);
+    setWallHeight("");
+    setIsShapeClosed(false);
   };
 
   // Export measurements to PDF
@@ -1051,50 +1104,79 @@ export default function MeasurementCanvas() {
     yPos += 15;
     doc.setTextColor(0, 0, 0);
 
-    // Categories
-    Object.entries(grouped).forEach(([categoryName, items]) => {
-      // Calculate totals
-      const pointItems = items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined));
-      const lineItems = items.filter(m => m.type !== 'point' && (m.perimeter === null || m.perimeter === undefined));
-      const areaItems = items.filter(m => m.type !== 'point' && m.perimeter !== null && m.perimeter !== undefined);
-      
-      const totalCount = pointItems.length;
-      const totalLinearFt = lineItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
-      const totalAreaSqFt = areaItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
+      // Categories
+      Object.entries(grouped).forEach(([categoryName, items]) => {
+        // Check if this is a Wall category
+        const isWallCat = WALL_CATEGORIES.includes(categoryName);
 
-      // Check if we need a new page
-      if (yPos > 270) {
-        doc.addPage();
-        yPos = 25;
-      }
+        // Calculate totals
+        const pointItems = items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
+        const lineItems = !isWallCat ? items.filter(m => m.type !== 'point' && (m.perimeter === null || m.perimeter === undefined)) : [];
+        const areaItems = !isWallCat ? items.filter(m => m.type !== 'point' && m.perimeter !== null && m.perimeter !== undefined) : [];
+        
+        const totalCount = pointItems.length;
+        const totalLinearFt = lineItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
+        const totalAreaSqFt = areaItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
 
-      // Category name
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.text(categoryName, margin, yPos);
-      yPos += 8;
+        // Wall totals
+        const totalWallLinearFt = isWallCat ? items.reduce((sum, m) => sum + parseFloat(m.perimeter || '0'), 0) : 0;
+        const totalWallArea = isWallCat ? items.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0) : 0;
 
-      // Totals
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "normal");
-      
-      if (totalCount > 0) {
-        doc.text(`Count: ${totalCount} item${totalCount === 1 ? '' : 's'}`, margin + 5, yPos);
-        yPos += 7;
-      }
-      
-      if (totalLinearFt > 0) {
-        doc.text(`Total: ${totalLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
-        yPos += 7;
-      }
-      
-      if (totalAreaSqFt > 0) {
-        doc.text(`Total: ${totalAreaSqFt.toFixed(2)} ${scaleUnit}²`, margin + 5, yPos);
-        yPos += 7;
-      }
+        // Check if we need a new page
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 25;
+        }
 
-      yPos += 8;
-    });
+        // Category name
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text(categoryName, margin, yPos);
+        yPos += 8;
+
+        // Totals
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        
+        if (isWallCat) {
+          // Wall: show linear footage, per-item height, and total area
+          doc.text(`Total Linear: ${totalWallLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
+          yPos += 7;
+          doc.text(`Total Wall Area: ${totalWallArea.toFixed(2)} ${scaleUnit}\u00b2`, margin + 5, yPos);
+          yPos += 7;
+          // Per-item breakdown
+          items.forEach((m, idx) => {
+            if (yPos > 270) { doc.addPage(); yPos = 25; }
+            const height = m.count != null ? (m.count / 100).toFixed(2) : '?';
+            doc.setFontSize(9);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(80, 80, 80);
+            doc.text(
+              `  Segment ${idx + 1}: ${m.perimeter} ${scaleUnit} \u00d7 ${height} ${scaleUnit} h = ${m.area} ${scaleUnit}\u00b2`,
+              margin + 5, yPos
+            );
+            doc.setTextColor(0, 0, 0);
+            yPos += 6;
+          });
+        } else {
+          if (totalCount > 0) {
+            doc.text(`Count: ${totalCount} item${totalCount === 1 ? '' : 's'}`, margin + 5, yPos);
+            yPos += 7;
+          }
+          
+          if (totalLinearFt > 0) {
+            doc.text(`Total: ${totalLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
+            yPos += 7;
+          }
+          
+          if (totalAreaSqFt > 0) {
+            doc.text(`Total: ${totalAreaSqFt.toFixed(2)} ${scaleUnit}\u00b2`, margin + 5, yPos);
+            yPos += 7;
+          }
+        }
+
+        yPos += 8;
+      });
 
     // Save PDF
     doc.save(`${project?.name || "measurements"}.pdf`);
@@ -1109,15 +1191,28 @@ export default function MeasurementCanvas() {
     }
 
     const data = measurements.map((m) => {
-      const isPoint = m.type === 'point' || (m.count !== null && m.count !== undefined);
-      const isLine = !isPoint && (m.perimeter === null || m.perimeter === undefined);
+      const isWallMeasurement = WALL_CATEGORIES.includes(m.name);
+      const isPoint = !isWallMeasurement && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
+      const isLine = !isWallMeasurement && !isPoint && (m.perimeter === null || m.perimeter === undefined);
       
-      return {
-        name: m.name,
-        type: isPoint ? 'Point' : isLine ? 'Line' : 'Area',
-        value: isPoint ? '1 item' : isLine ? `${m.area} ${scaleUnit}` : `${m.area} ${scaleUnit}²`,
-        color: m.color,
-      };
+      let type: string;
+      let value: string;
+      if (isWallMeasurement) {
+        const height = m.count != null ? (m.count / 100).toFixed(2) : '?';
+        type = 'Wall';
+        value = `${m.perimeter} ${scaleUnit} linear x ${height} ${scaleUnit} h = ${m.area} ${scaleUnit}\u00b2`;
+      } else if (isPoint) {
+        type = 'Point';
+        value = '1 item';
+      } else if (isLine) {
+        type = 'Line';
+        value = `${m.area} ${scaleUnit}`;
+      } else {
+        type = 'Area';
+        value = `${m.area} ${scaleUnit}\u00b2`;
+      }
+      
+      return { name: m.name, type, value, color: m.color };
     });
 
     const csv = [
@@ -1552,18 +1647,29 @@ export default function MeasurementCanvas() {
                       }, {} as Record<string, typeof measurements>);
 
                       return Object.entries(grouped || {}).map(([categoryName, items]) => {
-                        // Check if this is a point counting category
-                        const isPointCategory = items.some(m => m.type === 'point' || (m.count !== null && m.count !== undefined));
+                        // Check if this is a Wall category (has perimeter=linearFt, count=height*100, type=line)
+                        const isWallCategory = WALL_CATEGORIES.includes(categoryName);
+
+                        // Check if this is a point counting category (but NOT a wall category)
+                        const isPointCategory = !isWallCategory && items.some(m => m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
                         
                         // Calculate total count for point measurements
                         const totalCount = isPointCategory
-                          ? items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined)).length
+                          ? items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line')).length
+                          : 0;
+
+                        // Wall category totals
+                        const totalWallLinearFt = isWallCategory
+                          ? items.reduce((sum, m) => sum + parseFloat(m.perimeter || '0'), 0)
+                          : 0;
+                        const totalWallArea = isWallCategory
+                          ? items.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0)
                           : 0;
                         
-                        // Calculate total linear feet for line measurements in this category
-                        const totalLinearFt = items
+                        // Calculate total linear feet for regular line measurements in this category
+                        const totalLinearFt = !isWallCategory ? items
                           .filter(m => m.type !== 'point' && (m.perimeter === null || m.perimeter === undefined))
-                          .reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
+                          .reduce((sum, m) => sum + parseFloat(m.area || '0'), 0) : 0;
                         
                         const hasLines = totalLinearFt > 0;
 
@@ -1597,12 +1703,22 @@ export default function MeasurementCanvas() {
                                 <div className="flex-1">
                                   <div className="flex items-center justify-between">
                                     <p className="font-semibold text-sm">{categoryName}</p>
+                                    {isWallCategory && (
+                                      <div className="text-right">
+                                        <p className="text-xs font-medium text-primary">
+                                          {totalWallLinearFt.toFixed(2)} {scaleUnit} linear
+                                        </p>
+                                        <p className="text-xs font-medium text-orange-500">
+                                          {totalWallArea.toFixed(2)} {scaleUnit}² area
+                                        </p>
+                                      </div>
+                                    )}
                                     {isPointCategory && (
                                       <p className="text-xs font-medium text-primary">
                                         Count: {totalCount} item{totalCount === 1 ? '' : 's'}
                                       </p>
                                     )}
-                                    {!isPointCategory && hasLines && (
+                                    {!isPointCategory && !isWallCategory && hasLines && (
                                       <p className="text-xs font-medium text-primary">
                                         Total: {totalLinearFt.toFixed(2)} {scaleUnit}
                                       </p>
@@ -1641,8 +1757,9 @@ export default function MeasurementCanvas() {
                             {expandedCategories.has(categoryName) && (
                             <div className="divide-y divide-border">
                               {items.map((measurement, index) => {
-                                const isLine = measurement.perimeter === null || measurement.perimeter === undefined;
                                 const isPoint = measurement.type === 'point';
+                                // Wall measurements have perimeter set (linear ft) but are NOT area measurements
+                                const isLine = !isPoint && !isWallCategory && (measurement.perimeter === null || measurement.perimeter === undefined);
                                 return (
                                   <div
                                     key={measurement.id}
@@ -1659,6 +1776,14 @@ export default function MeasurementCanvas() {
                                             <div className="flex items-center gap-1.5">
                                               <span>Marker #{index + 1}</span>
                                             </div>
+                                          ) : isWallCategory ? (
+                                            <>
+                                              <div>{measurement.perimeter} {scaleUnit} linear</div>
+                                              {measurement.count != null && (
+                                                <div className="text-[10px]">Height: {(measurement.count / 100).toFixed(2)} {scaleUnit}</div>
+                                              )}
+                                              <div className="text-[10px] font-medium text-orange-500">Area: {measurement.area} {scaleUnit}²</div>
+                                            </>
                                           ) : isLine ? (
                                             <div>{measurement.area} {scaleUnit}</div>
                                           ) : (
@@ -1817,6 +1942,80 @@ export default function MeasurementCanvas() {
             <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending}>
               {createMeasurementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Wall Height Dialog */}
+      <Dialog open={isWallHeightDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setIsWallHeightDialogOpen(false);
+          setPendingWallMeasurement(null);
+          setWallHeight("");
+          setCurrentPolygon([]);
+          setIsShapeClosed(false);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Wall Height</DialogTitle>
+            <DialogDescription>
+              {pendingWallMeasurement && (
+                <span>
+                  Wall length: <strong>{pendingWallMeasurement.linearFt.toFixed(2)} {scaleUnit}</strong>.
+                  Enter the wall height to calculate the total wall area.
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="wall-height-input">Wall Height ({scaleUnit})</Label>
+              <Input
+                id="wall-height-input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={wallHeight}
+                onChange={(e) => setWallHeight(e.target.value)}
+                placeholder={`e.g. 8`}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && saveWallMeasurement()}
+              />
+            </div>
+            {wallHeight && !isNaN(parseFloat(wallHeight)) && parseFloat(wallHeight) > 0 && pendingWallMeasurement && (
+              <div className="rounded-md bg-muted px-4 py-3 text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Linear footage:</span>
+                  <span className="font-medium">{pendingWallMeasurement.linearFt.toFixed(2)} {scaleUnit}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Height:</span>
+                  <span className="font-medium">{parseFloat(wallHeight).toFixed(2)} {scaleUnit}</span>
+                </div>
+                <div className="flex justify-between border-t border-border pt-1 mt-1">
+                  <span className="font-semibold">Wall Area:</span>
+                  <span className="font-bold text-primary">
+                    {(pendingWallMeasurement.linearFt * parseFloat(wallHeight)).toFixed(2)} {scaleUnit}²
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsWallHeightDialogOpen(false);
+              setPendingWallMeasurement(null);
+              setWallHeight("");
+              setCurrentPolygon([]);
+              setIsShapeClosed(false);
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={saveWallMeasurement} disabled={createMeasurementMutation.isPending}>
+              {createMeasurementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Save Wall
             </Button>
           </DialogFooter>
         </DialogContent>
