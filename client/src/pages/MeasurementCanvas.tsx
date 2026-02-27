@@ -678,14 +678,44 @@ export default function MeasurementCanvas() {
     setPanOffset({ x: 0, y: 0 });
   };
 
-  // Handle mouse wheel zoom - keep canvas stable
+  // Handle mouse wheel zoom - zoom to cursor position
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     e.stopPropagation();
     
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
     // Calculate zoom delta (1% increment for smooth zooming)
     const delta = e.deltaY > 0 ? -0.01 : 0.01;
-    setZoomLevel(prev => Math.max(0.1, Math.min(4.0, prev + delta)));
+    const newZoom = Math.max(0.1, Math.min(4.0, zoomLevel + delta));
+    
+    if (newZoom === zoomLevel) return; // No change, skip calculation
+    
+    // Get mouse position relative to the container (viewport)
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // The canvas point under the mouse (in canvas pixel coordinates)
+    // Canvas is positioned at panOffset, so we need to account for that
+    const canvasX = mouseX - panOffset.x;
+    const canvasY = mouseY - panOffset.y;
+    
+    // After zoom, canvas size will change by ratio newZoom/zoomLevel
+    // We want the same canvas point to stay under the mouse
+    const zoomRatio = newZoom / zoomLevel;
+    
+    // New canvas position under mouse after zoom
+    const newCanvasX = canvasX * zoomRatio;
+    const newCanvasY = canvasY * zoomRatio;
+    
+    // Adjust pan offset so the canvas point stays under mouse
+    const newPanX = mouseX - newCanvasX;
+    const newPanY = mouseY - newCanvasY;
+    
+    setZoomLevel(newZoom);
+    setPanOffset({ x: newPanX, y: newPanY });
   };
 
   // Handle mouse down for panning, drawing, or vertex dragging

@@ -349,3 +349,6 @@
 
 ## Zoom Smoothness
 - [x] Fix canvas shifting during zoom (should stay perfectly stable)
+
+## Zoom-to-Cursor Fix
+- [x] Implement proper zoom-to-cursor (zoom centers on pointer without canvas jumping)
