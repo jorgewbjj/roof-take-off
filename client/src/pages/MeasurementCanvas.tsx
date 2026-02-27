@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -68,6 +68,7 @@ export default function MeasurementCanvas() {
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [hiddenCategories, setHiddenCategories] = useState<Set<string>>(new Set());
   const [hiddenMeasurements, setHiddenMeasurements] = useState<Set<number>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [isNameDialogOpen, setIsNameDialogOpen] = useState(false);
   const [editingProjectName, setEditingProjectName] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
@@ -1478,6 +1479,28 @@ export default function MeasurementCanvas() {
                             {/* Category Header */}
                             <div className="bg-accent/30 px-3 py-2 border-b border-border">
                               <div className="flex items-center justify-between gap-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-5 w-5 p-0 shrink-0"
+                                  onClick={() => {
+                                    setExpandedCategories(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(categoryName)) {
+                                        next.delete(categoryName);
+                                      } else {
+                                        next.add(categoryName);
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                >
+                                  {expandedCategories.has(categoryName) ? (
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </Button>
                                 <div className="flex-1">
                                   <div className="flex items-center justify-between">
                                     <p className="font-semibold text-sm">{categoryName}</p>
@@ -1522,6 +1545,7 @@ export default function MeasurementCanvas() {
                             </div>
                             
                             {/* Category Items */}
+                            {expandedCategories.has(categoryName) && (
                             <div className="divide-y divide-border">
                               {items.map((measurement, index) => {
                                 const isLine = measurement.perimeter === null || measurement.perimeter === undefined;
@@ -1593,8 +1617,10 @@ export default function MeasurementCanvas() {
                                     </div>
                                   </div>
                                 );
-                              })}
+                              })
+                            }
                             </div>
+                            )}
                           </div>
                         );
                       });

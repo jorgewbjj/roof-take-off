@@ -317,3 +317,12 @@
 - [x] Test Draw button with all regular categories (Drip Edge, Walk Pads, etc.)
 - [x] Test Count button with all counting categories (Curbs, Pipes, custom categories)
 - [x] Verify both buttons work independently without interfering with each other
+
+## Collapsible Categories in Sidebar
+- [x] Add expand/collapse state for each category
+- [x] Add arrow button next to category header to toggle expansion
+- [x] By default, categories should be collapsed (markers hidden)
+- [x] Clicking arrow expands category to show individual markers
+- [x] Preserve expand/collapse state during session
+- [x] Ensure category-level actions (eye icon, delete) still work when collapsed
+- [x] Test with multiple categories and many markers
