@@ -289,3 +289,15 @@
 - [x] Fix marker rendering logic in redrawOverlay function
 - [x] Verify markers are visible for both Curbs and Pipes categories
 - [x] Test that all other measurements (areas, lines) still render correctly
+
+## Custom Counting Categories Feature
+- [x] Create database table for custom counting categories
+- [x] Add user_id to categories table to associate with owner
+- [x] Create backend API to fetch user's custom categories
+- [x] Create backend API to create new custom category
+- [x] Update Count dialog to show both preset and custom categories
+- [x] Add input field in Count dialog for creating new custom category when "Other (Custom)" is selected
+- [x] Save new custom category to database when created
+- [x] Load custom categories from database when opening Count dialog
+- [x] Test creating custom categories and using them across different projects
+- [x] Verify all existing features continue to work

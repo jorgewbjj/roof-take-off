@@ -63,3 +63,18 @@ export const measurements = mysqlTable("measurements", {
 
 export type Measurement = typeof measurements.$inferSelect;
 export type InsertMeasurement = typeof measurements.$inferInsert;
+
+/**
+ * Counting Categories table - stores custom counting categories created by users
+ * Preset categories (Curbs, Pipes) are hardcoded in the frontend
+ * This table stores user-created custom categories that persist across projects
+ */
+export const countingCategories = mysqlTable("countingCategories", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(), // Owner of this custom category
+  name: varchar("name", { length: 255 }).notNull(), // Category name (e.g., "Vents", "Drains")
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CountingCategory = typeof countingCategories.$inferSelect;
+export type InsertCountingCategory = typeof countingCategories.$inferInsert;

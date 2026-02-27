@@ -1,6 +1,6 @@
 import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement } from "../drizzle/schema";
+import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -166,4 +166,20 @@ export async function deleteMeasurement(measurementId: number) {
   if (!db) throw new Error("Database not available");
   
   await db.delete(measurements).where(eq(measurements.id, measurementId));
+}
+
+// Counting Categories queries
+export async function getUserCountingCategories(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  
+  return db.select().from(countingCategories).where(eq(countingCategories.userId, userId)).orderBy(desc(countingCategories.createdAt));
+}
+
+export async function createCountingCategory(category: InsertCountingCategory) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  
+  const result = await db.insert(countingCategories).values(category);
+  return result[0].insertId;
 }

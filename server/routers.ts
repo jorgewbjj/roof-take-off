@@ -141,6 +141,24 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  countingCategories: router({
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserCountingCategories(ctx.user.id);
+    }),
+
+    create: protectedProcedure
+      .input(z.object({
+        name: z.string().min(1).max(255),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const categoryId = await db.createCountingCategory({
+          userId: ctx.user.id,
+          name: input.name,
+        });
+        return { id: categoryId };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

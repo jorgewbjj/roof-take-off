@@ -39,13 +39,17 @@ const PRESET_CATEGORIES = [
   "Other"
 ];
 
-// Categories that use point counting (click to place markers)
-const POINT_COUNT_CATEGORIES = ["Curbs", "Pipes"];
+// Preset categories that use point counting (click to place markers)
+const PRESET_POINT_COUNT_CATEGORIES = ["Curbs", "Pipes"];
 
 export default function MeasurementCanvas() {
   const { id } = useParams<{ id: string }>();
   const projectId = parseInt(id || "0");
   const { user, loading: authLoading } = useAuth();
+  
+  // Fetch custom counting categories
+  const { data: customCategories = [] } = trpc.countingCategories.list.useQuery();
+  const createCategoryMutation = trpc.countingCategories.create.useMutation();
   const [, setLocation] = useLocation();
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -774,8 +778,9 @@ export default function MeasurementCanvas() {
 
     if (!isDrawing) return;
 
-    // Point counting mode for Curbs and Pipes: each click places a marker
-    const isPointCountingMode = POINT_COUNT_CATEGORIES.includes(selectedCategory || measurementName);
+    // Point counting mode for preset and custom categories: each click places a marker
+    const allPointCountCategories = [...PRESET_POINT_COUNT_CATEGORIES, ...customCategories.map(c => c.name)];
+    const isPointCountingMode = allPointCountCategories.includes(selectedCategory || measurementName);
     if (isPointCountingMode) {
       const normalizedX = x / zoomLevel;
       const normalizedY = y / zoomLevel;
@@ -1728,12 +1733,17 @@ export default function MeasurementCanvas() {
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {POINT_COUNT_CATEGORIES.map((category) => (
+                  {PRESET_POINT_COUNT_CATEGORIES.map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
                     </SelectItem>
                   ))}
-                  <SelectItem value="Other">Other (Custom)</SelectItem>
+                  {customCategories.map((category) => (
+                    <SelectItem key={category.id} value={category.name}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="Other">Other (Create New)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1757,10 +1767,22 @@ export default function MeasurementCanvas() {
             }}>
               Cancel
             </Button>
-            <Button onClick={() => {
+            <Button onClick={async () => {
               if (isCustomCategory && !measurementName.trim()) {
                 return; // Don't start if custom name is empty
               }
+              
+              // If custom category, save it to database first
+              if (isCustomCategory && measurementName.trim()) {
+                try {
+                  await createCategoryMutation.mutateAsync({ name: measurementName.trim() });
+                  toast.success(`Created new category: ${measurementName}`);
+                } catch (error) {
+                  toast.error("Failed to create category");
+                  return;
+                }
+              }
+              
               setShowCountCategoryDialog(false);
               setIsCountingMode(true);
               setIsDrawing(true); // Enable drawing mode for point counting
