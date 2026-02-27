@@ -352,3 +352,6 @@
 
 ## Zoom-to-Cursor Fix
 - [x] Implement proper zoom-to-cursor (zoom centers on pointer without canvas jumping)
+
+## Page Scroll Prevention
+- [x] Ensure page scrolling is completely disabled (only sidebar should scroll)

@@ -1391,7 +1391,7 @@ export default function MeasurementCanvas() {
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas Area */}
         <div 
-          className="flex-1 overflow-auto p-6" 
+          className="flex-1 overflow-hidden p-6" 
           ref={containerRef}
           onWheel={(e) => {
             // Prevent page scrolling when mouse is over canvas area
