@@ -346,3 +346,6 @@
 
 ## Zoom Improvements
 - [x] Implement zoom-to-cursor (zoom centers on mouse pointer position)
+
+## Zoom Smoothness
+- [x] Fix canvas shifting during zoom (should stay perfectly stable)
