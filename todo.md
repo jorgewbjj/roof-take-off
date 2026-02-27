@@ -358,3 +358,6 @@
 
 ## Keyboard Shortcuts - Fit to Screen
 - [x] Add "F" key shortcut to fit canvas to screen
+
+## Fit-to-Screen Fix
+- [x] Fix PDF clipping when fitting to screen - ensure full PDF is visible

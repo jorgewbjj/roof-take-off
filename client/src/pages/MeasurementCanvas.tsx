@@ -181,12 +181,16 @@ export default function MeasurementCanvas() {
     const pdfWidth = pdfViewport.width;
     const pdfHeight = pdfViewport.height;
     const container = containerRef.current;
-    const containerWidth = container.clientWidth - 48;
-    const containerHeight = container.clientHeight - 48;
+    // Use a generous padding buffer (64px each side = 128px total) to ensure
+    // the full PDF is visible with comfortable margins
+    const padding = 128;
+    const containerWidth = container.clientWidth - padding;
+    const containerHeight = container.clientHeight - padding;
     const zoomToFitWidth = containerWidth / pdfWidth;
     const zoomToFitHeight = containerHeight / pdfHeight;
-    const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight, 1);
-    setZoomLevel(optimalZoom);
+    // Take the smaller ratio so the PDF fits in both dimensions, no 100% cap
+    const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight);
+    setZoomLevel(Math.max(0.1, Math.min(4.0, optimalZoom)));
     setPanOffset({ x: 0, y: 0 });
     if (!silent) toast.success('Fit to screen');
   };
@@ -194,30 +198,7 @@ export default function MeasurementCanvas() {
   // Auto-fit zoom when PDF first loads
   useEffect(() => {
     if (!pdfDoc || !containerRef.current) return;
-
-    const autoFit = async () => {
-      const page = await pdfDoc.getPage(currentPage);
-      const baseScale = 2.5;
-      
-      // Get PDF dimensions at base scale
-      const pdfViewport = page.getViewport({ scale: baseScale });
-      const pdfWidth = pdfViewport.width;
-      const pdfHeight = pdfViewport.height;
-      
-      // Get container dimensions (subtract padding)
-      const container = containerRef.current!;
-      const containerWidth = container.clientWidth - 48; // 24px padding on each side
-      const containerHeight = container.clientHeight - 48;
-      
-      // Calculate zoom to fit
-      const zoomToFitWidth = containerWidth / pdfWidth;
-      const zoomToFitHeight = containerHeight / pdfHeight;
-      const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight, 1); // Cap at 100%
-      
-      setZoomLevel(optimalZoom);
-    };
-
-    autoFit();
+    handleFitToScreen(true); // silent = true, no toast on initial load
   }, [pdfDoc]); // Only run when PDF loads
 
   // Render PDF page with high quality
