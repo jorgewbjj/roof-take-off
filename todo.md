@@ -336,3 +336,6 @@
 ## Bug Fixes - Counting Feature
 - [x] Fix new categories sometimes not saving when counting
 - [x] Fix markers not showing on canvas after placement
+
+## Keyboard Shortcuts
+- [x] Add Escape key shortcut to stop drawing or counting mode

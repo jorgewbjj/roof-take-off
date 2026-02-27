@@ -244,14 +244,37 @@ export default function MeasurementCanvas() {
         return;
       }
       
-      // Escape key to complete drawing (2+ points for line, 3+ for area)
-      if (e.key === 'Escape' && isDrawing && currentPolygon.length >= 2) {
+      // Escape key behavior:
+      // 1. If in counting mode -> stop counting
+      // 2. If in drawing mode with no points -> stop drawing
+      // 3. If in drawing mode with 2+ points -> complete the drawing
+      if (e.key === 'Escape') {
         e.preventDefault();
-        // Reset category selection to default
-        setSelectedCategory("Drip Edge");
-        setMeasurementName("Drip Edge");
-        setIsCustomCategory(false);
-        setIsNameDialogOpen(true);
+        
+        // Stop counting mode
+        if (isCountingMode) {
+          setIsCountingMode(false);
+          setIsDrawing(false);
+          setCurrentPolygon([]);
+          toast.success('Stopped counting');
+          return;
+        }
+        
+        // Stop drawing mode if no points yet
+        if (isDrawing && currentPolygon.length === 0) {
+          setIsDrawing(false);
+          toast.success('Stopped drawing');
+          return;
+        }
+        
+        // Complete drawing if 2+ points
+        if (isDrawing && currentPolygon.length >= 2) {
+          // Reset category selection to default
+          setSelectedCategory("Drip Edge");
+          setMeasurementName("Drip Edge");
+          setIsCustomCategory(false);
+          setIsNameDialogOpen(true);
+        }
       }
       
       // Delete key to remove selected measurement
@@ -266,7 +289,7 @@ export default function MeasurementCanvas() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId]);
+  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode]);
 
   // Calculate real-world distance from pixel distance
   // scale represents: 1 inch on PDF = scale feet in real world
