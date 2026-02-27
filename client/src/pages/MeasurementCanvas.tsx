@@ -778,9 +778,9 @@ export default function MeasurementCanvas() {
 
     if (!isDrawing) return;
 
-    // Point counting mode for preset and custom categories: each click places a marker
+    // Point counting mode: use isCountingMode state (set by Count button) or check if category is in preset/custom list
     const allPointCountCategories = [...PRESET_POINT_COUNT_CATEGORIES, ...customCategories.map(c => c.name)];
-    const isPointCountingMode = allPointCountCategories.includes(selectedCategory || measurementName);
+    const isPointCountingMode = isCountingMode || allPointCountCategories.includes(selectedCategory || measurementName);
     if (isPointCountingMode) {
       const normalizedX = x / zoomLevel;
       const normalizedY = y / zoomLevel;

@@ -301,3 +301,11 @@
 - [x] Load custom categories from database when opening Count dialog
 - [x] Test creating custom categories and using them across different projects
 - [x] Verify all existing features continue to work
+
+## Custom Category Counting Behavior Fix
+- [x] Fix custom categories created via Count dialog to work as point-counting categories
+- [x] Ensure custom categories use click-to-place-marker behavior (not shape/line drawing)
+- [x] Update category type detection logic to recognize all custom categories as counting types
+- [x] Test creating new custom category and verify it places markers on click
+- [x] Verify preset categories (Curbs, Pipes) still work correctly
+- [x] Ensure all existing features continue to work
