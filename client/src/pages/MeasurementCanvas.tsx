@@ -55,6 +55,7 @@ export default function MeasurementCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -290,6 +291,31 @@ export default function MeasurementCanvas() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode]);
+
+  // Prevent page scrolling with mouse wheel except in sidebar
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      // Check if mouse is over sidebar
+      const sidebar = sidebarRef.current;
+      if (sidebar) {
+        const rect = sidebar.getBoundingClientRect();
+        const isOverSidebar = 
+          e.clientX >= rect.left &&
+          e.clientX <= rect.right &&
+          e.clientY >= rect.top &&
+          e.clientY <= rect.bottom;
+        
+        // Allow scrolling in sidebar, prevent everywhere else
+        if (!isOverSidebar) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    // Use passive: false to allow preventDefault
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, []);
 
   // Calculate real-world distance from pixel distance
   // scale represents: 1 inch on PDF = scale feet in real world
@@ -1413,7 +1439,7 @@ export default function MeasurementCanvas() {
         </div>
 
         {/* Sidebar */}
-        <div className="w-80 border-l border-border bg-card overflow-y-auto flex-shrink-0">
+        <div ref={sidebarRef} className="w-80 border-l border-border bg-card overflow-y-auto flex-shrink-0">
           <div className="p-4 space-y-4">
             {/* Area Totals Summary */}
             <Card>

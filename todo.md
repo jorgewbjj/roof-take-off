@@ -339,3 +339,7 @@
 
 ## Keyboard Shortcuts
 - [x] Add Escape key shortcut to stop drawing or counting mode
+
+## Mouse Wheel Behavior
+- [x] Disable page scrolling with mouse wheel except in sidebar
+- [x] Mouse wheel should only zoom canvas in main area
