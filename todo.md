@@ -332,3 +332,7 @@
 - [x] Make mouse wheel only zoom in/out on canvas
 - [x] Ensure zoom works smoothly without page scrolling
 - [x] Test in both drawing and counting modes
+
+## Bug Fixes - Counting Feature
+- [x] Fix new categories sometimes not saving when counting
+- [x] Fix markers not showing on canvas after placement

@@ -1804,6 +1804,10 @@ export default function MeasurementCanvas() {
               if (isCustomCategory && measurementName.trim()) {
                 try {
                   await createCategoryMutation.mutateAsync({ name: measurementName.trim() });
+                  // Invalidate query cache to refresh the category list
+                  await utils.countingCategories.list.invalidate();
+                  // Set selectedCategory to the new custom category name
+                  setSelectedCategory(measurementName.trim());
                   toast.success(`Created new category: ${measurementName}`);
                 } catch (error) {
                   toast.error("Failed to create category");
