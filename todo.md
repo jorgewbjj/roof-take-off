@@ -355,3 +355,6 @@
 
 ## Page Scroll Prevention
 - [x] Ensure page scrolling is completely disabled (only sidebar should scroll)
+
+## Keyboard Shortcuts - Fit to Screen
+- [x] Add "F" key shortcut to fit canvas to screen

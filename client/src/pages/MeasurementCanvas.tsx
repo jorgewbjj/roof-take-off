@@ -172,6 +172,25 @@ export default function MeasurementCanvas() {
     loadPdf();
   }, [project]);
 
+  // Fit canvas to screen - used by both auto-fit on load and F key shortcut
+  const handleFitToScreen = async (silent = false) => {
+    if (!pdfDoc || !containerRef.current) return;
+    const page = await pdfDoc.getPage(currentPage);
+    const baseScale = 2.5;
+    const pdfViewport = page.getViewport({ scale: baseScale });
+    const pdfWidth = pdfViewport.width;
+    const pdfHeight = pdfViewport.height;
+    const container = containerRef.current;
+    const containerWidth = container.clientWidth - 48;
+    const containerHeight = container.clientHeight - 48;
+    const zoomToFitWidth = containerWidth / pdfWidth;
+    const zoomToFitHeight = containerHeight / pdfHeight;
+    const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight, 1);
+    setZoomLevel(optimalZoom);
+    setPanOffset({ x: 0, y: 0 });
+    if (!silent) toast.success('Fit to screen');
+  };
+
   // Auto-fit zoom when PDF first loads
   useEffect(() => {
     if (!pdfDoc || !containerRef.current) return;
@@ -286,11 +305,21 @@ export default function MeasurementCanvas() {
           setSelectedMeasurementId(null);
         }
       }
+
+      // F key to fit canvas to screen
+      if (e.key === 'f' || e.key === 'F') {
+        // Only trigger if not typing in an input/textarea
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+          e.preventDefault();
+          handleFitToScreen();
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode]);
+  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode, handleFitToScreen]);
 
   // Prevent page scrolling with mouse wheel except in sidebar
   useEffect(() => {
