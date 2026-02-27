@@ -309,3 +309,11 @@
 - [x] Test creating new custom category and verify it places markers on click
 - [x] Verify preset categories (Curbs, Pipes) still work correctly
 - [x] Ensure all existing features continue to work
+
+## Draw/Count Button Separation Fix
+- [x] Fix Draw button to only work for drawing shapes and lines (polygon/line mode)
+- [x] Ensure Draw button never enters counting mode
+- [x] Keep Count button exclusively for point-counting functionality
+- [x] Test Draw button with all regular categories (Drip Edge, Walk Pads, etc.)
+- [x] Test Count button with all counting categories (Curbs, Pipes, custom categories)
+- [x] Verify both buttons work independently without interfering with each other

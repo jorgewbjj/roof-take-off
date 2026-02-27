@@ -778,9 +778,9 @@ export default function MeasurementCanvas() {
 
     if (!isDrawing) return;
 
-    // Point counting mode: use isCountingMode state (set by Count button) or check if category is in preset/custom list
-    const allPointCountCategories = [...PRESET_POINT_COUNT_CATEGORIES, ...customCategories.map(c => c.name)];
-    const isPointCountingMode = isCountingMode || allPointCountCategories.includes(selectedCategory || measurementName);
+    // Point counting mode: ONLY use isCountingMode state (set exclusively by Count button)
+    // Draw button should always draw shapes/lines, never count
+    const isPointCountingMode = isCountingMode;
     if (isPointCountingMode) {
       const normalizedX = x / zoomLevel;
       const normalizedY = y / zoomLevel;
