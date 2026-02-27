@@ -283,3 +283,9 @@
 - [x] Integrate count markers into layer visibility system (eye icon to hide/show)
 - [x] Ensure markers can be individually deleted like other measurements
 - [x] Verify all existing features continue to work
+
+## Marker Visibility Bug Fix
+- [x] Investigate why curb and pipe markers are not showing on canvas
+- [x] Fix marker rendering logic in redrawOverlay function
+- [x] Verify markers are visible for both Curbs and Pipes categories
+- [x] Test that all other measurements (areas, lines) still render correctly

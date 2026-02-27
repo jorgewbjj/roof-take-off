@@ -317,7 +317,13 @@ export default function MeasurementCanvas() {
       if (hiddenCategories.has(measurement.name) || hiddenMeasurements.has(measurement.id)) return;
       
       const coords = measurement.coordinates as Point[];
-      if (coords.length < 2) return;
+      if (coords.length < 1) return; // Need at least 1 coordinate
+
+      // Check measurement type first
+      const isPoint = measurement.type === 'point' || (measurement.count !== null && measurement.count !== undefined);
+      
+      // Point measurements need only 1 coordinate, others need at least 2
+      if (!isPoint && coords.length < 2) return;
 
       // Scale coordinates with zoom level
       const scaledCoords = coords.map(p => ({
@@ -326,9 +332,6 @@ export default function MeasurementCanvas() {
       }));
 
       const isSelected = isEditMode && selectedMeasurementId === measurement.id;
-      
-      // Check measurement type
-      const isPoint = measurement.type === 'point' || (measurement.count !== null && measurement.count !== undefined);
       const isLine = !isPoint && (measurement.perimeter === null || measurement.perimeter === undefined);
 
       if (isPoint) {
