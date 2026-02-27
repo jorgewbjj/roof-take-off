@@ -691,8 +691,8 @@ export default function MeasurementCanvas() {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // Calculate zoom delta
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    // Calculate zoom delta (1% increment for smooth zooming)
+    const delta = e.deltaY > 0 ? -0.01 : 0.01;
     const newZoom = Math.max(0.1, Math.min(4.0, zoomLevel + delta));
     
     // Calculate the point in PDF coordinates that's under the mouse (before zoom)
