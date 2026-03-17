@@ -138,10 +138,16 @@ export default function MeasurementCanvas() {
   });
 
   const deleteMeasurementMutation = trpc.measurements.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       utils.measurements.list.invalidate({ projectId });
       toast.success("Measurement deleted");
       setSelectedMeasurementId(null);
+      // Clear the deleted measurement from hidden set to avoid stale state
+      setHiddenMeasurements(prev => {
+        const next = new Set(prev);
+        next.delete(variables.id);
+        return next;
+      });
       redrawOverlay();
     },
   });
@@ -152,7 +158,7 @@ export default function MeasurementCanvas() {
 
     const loadPdf = async () => {
       try {
-        console.log("Loading PDF from URL:", project.pdfUrl);
+        // Loading PDF from URL
         const loadingTask = pdfjsLib.getDocument({
           url: project.pdfUrl,
           withCredentials: false,
@@ -165,7 +171,7 @@ export default function MeasurementCanvas() {
           standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/',
         });
         const pdf = await loadingTask.promise;
-        console.log("PDF loaded successfully, pages:", pdf.numPages);
+        // PDF loaded successfully
         setPdfDoc(pdf);
         setScale(parseFloat(project.scale || "1.0"));
         setScaleUnit(project.scaleUnit || "ft");
@@ -679,7 +685,7 @@ export default function MeasurementCanvas() {
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements]);
 
   // Zoom controls - keep PDF centered and stable
   const zoomAtPoint = (newZoom: number, clientX?: number, clientY?: number) => {
@@ -1062,7 +1068,7 @@ export default function MeasurementCanvas() {
       area: wallArea.toFixed(2),           // wall area = linear ft × height
       perimeter: pendingWallMeasurement.linearFt.toFixed(2), // linear ft stored in perimeter
       coordinates: pendingWallMeasurement.coordinates,
-      count: Math.round(height * 100),      // store height × 100 as integer in count field
+      count: Math.round(height * 1000),      // store height × 1000 as integer in count field (3 decimal places)
     });
     setIsWallHeightDialogOpen(false);
     setPendingWallMeasurement(null);
@@ -1147,7 +1153,7 @@ export default function MeasurementCanvas() {
           // Per-item breakdown
           items.forEach((m, idx) => {
             if (yPos > 270) { doc.addPage(); yPos = 25; }
-            const height = m.count != null ? (m.count / 100).toFixed(2) : '?';
+            const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
             doc.setFontSize(9);
             doc.setFont("helvetica", "normal");
             doc.setTextColor(80, 80, 80);
@@ -1198,7 +1204,7 @@ export default function MeasurementCanvas() {
       let type: string;
       let value: string;
       if (isWallMeasurement) {
-        const height = m.count != null ? (m.count / 100).toFixed(2) : '?';
+        const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
         type = 'Wall';
         value = `${m.perimeter} ${scaleUnit} linear x ${height} ${scaleUnit} h = ${m.area} ${scaleUnit}\u00b2`;
       } else if (isPoint) {
@@ -1589,17 +1595,22 @@ export default function MeasurementCanvas() {
                     <div className="flex justify-between items-center p-3 rounded-lg bg-primary/10 border border-primary/20">
                       <span className="font-semibold text-sm">Total Area</span>
                       <span className="font-bold text-lg text-primary">
-                        {measurements.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0).toFixed(2)} {scaleUnit}²
+                        {measurements
+                          .filter(m => m.type !== 'line' || !WALL_CATEGORIES.includes(m.name))
+                          .filter(m => m.type === 'area')
+                          .reduce((sum, m) => sum + parseFloat(m.area || '0'), 0).toFixed(2)} {scaleUnit}²
                       </span>
                     </div>
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground font-medium">By Color:</p>
                       {Object.entries(
-                        measurements.reduce((acc, m) => {
-                          const color = m.color;
-                          acc[color] = (acc[color] || 0) + parseFloat(m.area || '0');
-                          return acc;
-                        }, {} as Record<string, number>)
+                        measurements
+                          .filter(m => m.type === 'area') // only area measurements in color summary
+                          .reduce((acc, m) => {
+                            const color = m.color;
+                            acc[color] = (acc[color] || 0) + parseFloat(m.area || '0');
+                            return acc;
+                          }, {} as Record<string, number>)
                       ).map(([color, area]) => (
                         <div key={color} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
@@ -1780,7 +1791,7 @@ export default function MeasurementCanvas() {
                                             <>
                                               <div>{measurement.perimeter} {scaleUnit} linear</div>
                                               {measurement.count != null && (
-                                                <div className="text-[10px]">Height: {(measurement.count / 100).toFixed(2)} {scaleUnit}</div>
+                                                <div className="text-[10px]">Height: {(measurement.count / 1000).toFixed(2)} {scaleUnit}</div>
                                               )}
                                               <div className="text-[10px] font-medium text-orange-500">Area: {measurement.area} {scaleUnit}²</div>
                                             </>

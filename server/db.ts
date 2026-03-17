@@ -161,10 +161,48 @@ export async function updateMeasurement(measurementId: number, updates: Partial<
   await db.update(measurements).set(updates).where(eq(measurements.id, measurementId));
 }
 
+/** Update a measurement only if the requesting user owns the project it belongs to */
+export async function updateMeasurementIfOwned(measurementId: number, userId: number, updates: Partial<InsertMeasurement>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Join with projects to verify ownership
+  const result = await db.select({ projectUserId: projects.userId })
+    .from(measurements)
+    .innerJoin(projects, eq(measurements.projectId, projects.id))
+    .where(eq(measurements.id, measurementId))
+    .limit(1);
+
+  if (!result.length || result[0].projectUserId !== userId) {
+    throw new Error('Measurement not found or access denied');
+  }
+
+  await db.update(measurements).set(updates).where(eq(measurements.id, measurementId));
+}
+
 export async function deleteMeasurement(measurementId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
+  await db.delete(measurements).where(eq(measurements.id, measurementId));
+}
+
+/** Delete a measurement only if the requesting user owns the project it belongs to */
+export async function deleteMeasurementIfOwned(measurementId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Join with projects to verify ownership
+  const result = await db.select({ projectUserId: projects.userId })
+    .from(measurements)
+    .innerJoin(projects, eq(measurements.projectId, projects.id))
+    .where(eq(measurements.id, measurementId))
+    .limit(1);
+
+  if (!result.length || result[0].projectUserId !== userId) {
+    throw new Error('Measurement not found or access denied');
+  }
+
   await db.delete(measurements).where(eq(measurements.id, measurementId));
 }
 

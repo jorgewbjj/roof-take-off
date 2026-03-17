@@ -368,3 +368,14 @@
 - [x] Calculate wall area = linear ft × height
 - [x] Show wall area in sidebar measurements list
 - [x] Include wall measurements with area in PDF export
+
+## Code Review Fixes
+- [x] SECURITY: measurements.list and measurements.delete/update don't verify project ownership
+- [x] BUG: hiddenMeasurements set is never cleared when measurements are deleted
+- [x] BUG: redrawOverlay useEffect missing hiddenMeasurements in dependency array
+- [x] BUG: Summary "Total Area" includes wall areas incorrectly (wall area is not roof area)
+- [x] BUG: console.log statements left in production code (getPdfUrl, loadPdf)
+- [x] BUG: Wall height stored as count*100 integer - loses precision for heights like 8.5ft
+- [ ] UX: Scale unit dropdown values ("feet"/"meters") don't match display labels ("ft"/"m")
+- [ ] UX: Name dialog resets category to "Drip Edge" when Escape is pressed to complete drawing
+- [ ] PERF: redrawOverlay called on every mousemove even when not drawing

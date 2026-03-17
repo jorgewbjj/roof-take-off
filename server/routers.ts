@@ -37,14 +37,9 @@ export const appRouter = router({
         const project = await db.getProjectById(input.id, ctx.user.id);
         if (!project) throw new Error('Project not found');
         
-        console.log('[getPdfUrl] Project pdfKey:', project.pdfKey);
-        console.log('[getPdfUrl] Project pdfUrl:', project.pdfUrl);
-        
         // Generate fresh presigned URL using storage proxy
         const { storageGet } = await import('./storage');
         const { url } = await storageGet(project.pdfKey);
-        
-        console.log('[getPdfUrl] Presigned URL from storageGet:', url);
         
         return { url };
       }),
@@ -100,7 +95,10 @@ export const appRouter = router({
   measurements: router({
     list: protectedProcedure
       .input(z.object({ projectId: z.number() }))
-      .query(async ({ input }) => {
+      .query(async ({ ctx, input }) => {
+        // Verify user owns this project before returning measurements
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
         return db.getProjectMeasurements(input.projectId);
       }),
 
@@ -128,16 +126,18 @@ export const appRouter = router({
         area: z.string().optional(),
         coordinates: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
         const { id, ...updates } = input;
-        await db.updateMeasurement(id, updates);
+        // Verify user owns the measurement's project before updating
+        await db.updateMeasurementIfOwned(id, ctx.user.id, updates);
         return { success: true };
       }),
 
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
-        await db.deleteMeasurement(input.id);
+      .mutation(async ({ ctx, input }) => {
+        // Verify user owns the measurement's project before deleting
+        await db.deleteMeasurementIfOwned(input.id, ctx.user.id);
         return { success: true };
       }),
   }),
