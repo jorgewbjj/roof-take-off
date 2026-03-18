@@ -379,3 +379,15 @@
 - [ ] UX: Scale unit dropdown values ("feet"/"meters") don't match display labels ("ft"/"m")
 - [ ] UX: Name dialog resets category to "Drip Edge" when Escape is pressed to complete drawing
 - [ ] PERF: redrawOverlay called on every mousemove even when not drawing
+
+## Mobile / iPhone Support
+- [x] Add touch event handlers for drawing (touchstart, touchmove, touchend)
+- [x] Add pinch-to-zoom gesture support on canvas
+- [x] Add single-finger pan support on canvas (when not drawing)
+- [x] Prevent default touch scroll on canvas area (allow sidebar scroll)
+- [x] Fix mobile layout: sidebar becomes bottom sheet on small screens
+- [x] Make toolbar horizontally scrollable on mobile
+- [x] Add mobile sidebar toggle button in header
+- [x] Add iPhone safe-area padding (notch/home indicator)
+- [x] Update viewport meta tag for mobile scaling and safe-area
+- [x] Add scrollbar-none utility for clean mobile toolbar scrolling

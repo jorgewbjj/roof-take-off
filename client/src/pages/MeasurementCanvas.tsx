@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
@@ -104,6 +104,14 @@ export default function MeasurementCanvas() {
     linearFt: number;
     coordinates: Point[];
   } | null>(null);
+  // Touch gesture state
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // mobile bottom drawer
+  const lastTouchDistanceRef = useRef<number | null>(null); // for pinch-to-zoom
+  const lastTouchCenterRef = useRef<Point | null>(null); // for pinch center
+  const touchStartRef = useRef<Point | null>(null); // for single-finger pan
+  // Ref to handleCanvasClick to avoid forward-reference issues in touch handlers
+  const handleCanvasClickRef = useRef<((e: React.MouseEvent<HTMLCanvasElement>) => void) | null>(null);
+
   const baseScale = 2.5; // High quality PDF rendering base scale
 
   const utils = trpc.useUtils();
@@ -344,6 +352,149 @@ export default function MeasurementCanvas() {
     window.addEventListener('wheel', handleWheel, { passive: false });
     return () => window.removeEventListener('wheel', handleWheel);
   }, []);
+
+  // ─── Touch event handlers (iPhone / iPad support) ───────────────────────────
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault(); // prevent page scroll / default browser gestures
+
+    if (e.touches.length === 2) {
+      // Pinch-to-zoom: record initial distance and center
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      lastTouchDistanceRef.current = dist;
+      lastTouchCenterRef.current = {
+        x: (t0.clientX + t1.clientX) / 2,
+        y: (t0.clientY + t1.clientY) / 2,
+      };
+      // Cancel any single-finger pan
+      touchStartRef.current = null;
+      setIsPanning(false);
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const canvas = overlayCanvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      if (isDrawing || isCountingMode) {
+        // In drawing/counting mode: single tap will be handled by touchEnd (tap detection)
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      } else {
+        // Not drawing: start panning
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+        setIsPanning(true);
+        setPanStart({ x: touch.clientX, y: touch.clientY });
+      }
+    }
+  }, [isDrawing, isCountingMode]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+
+    if (e.touches.length === 2) {
+      // Pinch-to-zoom
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const newDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      const prevDist = lastTouchDistanceRef.current;
+      const center = lastTouchCenterRef.current;
+
+      if (prevDist !== null && center !== null) {
+        const scaleFactor = newDist / prevDist;
+        const canvas = overlayCanvasRef.current;
+        if (!canvas) return;
+        const rect = canvas.getBoundingClientRect();
+
+        // Current pinch center in canvas-local coords
+        const centerX = center.x - rect.left;
+        const centerY = center.y - rect.top;
+
+        setZoomLevel(prev => {
+          const newZoom = Math.max(0.1, Math.min(4.0, prev * scaleFactor));
+          const zoomRatio = newZoom / prev;
+          const canvasX = centerX - panOffset.x;
+          const canvasY = centerY - panOffset.y;
+          setPanOffset({
+            x: centerX - canvasX * zoomRatio,
+            y: centerY - canvasY * zoomRatio,
+          });
+          return newZoom;
+        });
+      }
+
+      lastTouchDistanceRef.current = newDist;
+      const newCenter = { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+      lastTouchCenterRef.current = newCenter;
+      return;
+    }
+
+    if (e.touches.length === 1) {
+      const touch = e.touches[0];
+      const canvas = overlayCanvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+
+      if (isPanning && panStart) {
+        const dx = touch.clientX - panStart.x;
+        const dy = touch.clientY - panStart.y;
+        setPanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+        setPanStart({ x: touch.clientX, y: touch.clientY });
+      }
+
+      if (isDrawing) {
+        setCursorPosition({ x, y });
+      }
+    }
+  }, [isPanning, panStart, panOffset, isDrawing]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+
+    // Reset pinch state when fingers lift
+    if (e.touches.length < 2) {
+      lastTouchDistanceRef.current = null;
+      lastTouchCenterRef.current = null;
+    }
+
+    if (e.touches.length === 0) {
+      // All fingers lifted
+      const changedTouch = e.changedTouches[0];
+      const startPos = touchStartRef.current;
+
+      if (startPos) {
+        const dx = Math.abs(changedTouch.clientX - startPos.x);
+        const dy = Math.abs(changedTouch.clientY - startPos.y);
+        const isTap = dx < 10 && dy < 10; // small movement = tap
+
+        if (isTap && (isDrawing || isCountingMode)) {
+          // Treat as a canvas click via ref to avoid forward-reference
+          const canvas = overlayCanvasRef.current;
+          if (canvas && handleCanvasClickRef.current) {
+            const rect = canvas.getBoundingClientRect();
+            const syntheticEvent = {
+              clientX: changedTouch.clientX,
+              clientY: changedTouch.clientY,
+              button: 0,
+            } as React.MouseEvent<HTMLCanvasElement>;
+            handleCanvasClickRef.current(syntheticEvent);
+          }
+        }
+      }
+
+      touchStartRef.current = null;
+      setIsPanning(false);
+      setPanStart(null);
+      setCursorPosition(null);
+    }
+  }, [isDrawing, isCountingMode]);
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Calculate real-world distance from pixel distance
   // scale represents: 1 inch on PDF = scale feet in real world
@@ -968,6 +1119,8 @@ export default function MeasurementCanvas() {
     const normalizedY = y / zoomLevel;
     setCurrentPolygon([...currentPolygon, { x: normalizedX, y: normalizedY }]);
   };
+  // Keep ref in sync for touch handlers
+  handleCanvasClickRef.current = handleCanvasClick;
 
   // Complete polygon
   const completePolygon = () => {
@@ -1265,11 +1418,11 @@ export default function MeasurementCanvas() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-card shadow-sm">
         {/* Top Row - Project Name and Export */}
-        <div className="px-6 py-3 border-b border-border flex items-center justify-between">
+        <div className="px-3 md:px-6 py-3 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={() => setLocation("/projects")}>
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline ml-2">Back</span>
             </Button>
             <Separator orientation="vertical" className="h-6" />
             {editingProjectName ? (
@@ -1288,18 +1441,29 @@ export default function MeasurementCanvas() {
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold text-foreground">{project.name}</h1>
+                <h1 className="text-base md:text-lg font-semibold text-foreground truncate max-w-[140px] sm:max-w-xs md:max-w-none">{project.name}</h1>
                 <Button variant="ghost" size="sm" onClick={() => setEditingProjectName(true)}>
                   <Edit2 className="w-4 h-4" />
                 </Button>
               </div>
             )}
           </div>
-          <DropdownMenu>
+          <div className="flex items-center gap-2">
+            {/* Mobile: sidebar toggle button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="md:hidden"
+              onClick={() => setIsSidebarOpen(prev => !prev)}
+            >
+              <ChevronRight className="w-4 h-4" />
+              <span className="ml-1 text-xs">Measurements</span>
+            </Button>
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
                 <Download className="w-4 h-4" />
-                Export
+                <span className="hidden sm:inline">Export</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -1313,10 +1477,11 @@ export default function MeasurementCanvas() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
 
         {/* Bottom Row - Toolbar with all controls */}
-        <div className="px-6 py-2 flex items-center gap-6 flex-wrap">
+        <div className="px-3 md:px-6 py-2 flex items-center gap-3 md:gap-6 overflow-x-auto scrollbar-none">
           {/* Drawing Tools */}
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">Tools:</span>
@@ -1502,7 +1667,7 @@ export default function MeasurementCanvas() {
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas Area */}
         <div 
-          className="flex-1 overflow-hidden p-6" 
+          className="flex-1 overflow-hidden p-2 md:p-6" 
           ref={containerRef}
           onWheel={(e) => {
             // Prevent page scrolling when mouse is over canvas area
@@ -1572,18 +1737,52 @@ export default function MeasurementCanvas() {
                 setPanStart(null);
               }}
               onContextMenu={(e) => e.preventDefault()}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               className="absolute top-0 left-0"
               style={{ 
                 pointerEvents: "auto",
-                cursor: isPanning ? "grabbing" : (isDrawing ? "none" : "grab")
+                cursor: isPanning ? "grabbing" : (isDrawing ? "none" : "grab"),
+                touchAction: "none",  // prevent browser handling touch (scroll/zoom)
               }}
             />
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div ref={sidebarRef} className="w-80 border-l border-border bg-card overflow-y-auto flex-shrink-0">
-          <div className="p-4 space-y-4">
+        {/* Sidebar - desktop: always visible right panel; mobile: slide-up overlay */}
+        {/* Mobile overlay backdrop */}
+        {isSidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+        <div
+          ref={sidebarRef}
+          className={[
+            "bg-card overflow-y-auto flex-shrink-0 z-50",
+            // Desktop: always-visible right panel
+            "md:w-80 md:border-l md:border-border md:relative md:translate-y-0",
+            // Mobile: fixed bottom sheet, full-width, slides up when open
+            "fixed bottom-0 left-0 right-0 md:static",
+            "max-h-[70vh] md:max-h-none",
+            "rounded-t-2xl md:rounded-none border-t md:border-t-0 border-border",
+            "transition-transform duration-300 ease-in-out",
+            isSidebarOpen ? "translate-y-0" : "translate-y-full md:translate-y-0",
+          ].join(" ")}
+        >
+          {/* Mobile drag handle */}
+          <div className="md:hidden flex justify-center pt-3 pb-1">
+            <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+          </div>
+          <div className="md:hidden flex justify-between items-center px-4 pb-2">
+            <span className="font-semibold text-sm">Measurements</span>
+            <Button variant="ghost" size="sm" onClick={() => setIsSidebarOpen(false)}>
+              <ChevronDown className="w-4 h-4" />
+            </Button>
+          </div>
+          <div className="p-4 space-y-4 pb-safe">
             {/* Area Totals Summary */}
             <Card>
               <CardHeader>
