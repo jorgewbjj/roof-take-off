@@ -391,3 +391,10 @@
 - [x] Add iPhone safe-area padding (notch/home indicator)
 - [x] Update viewport meta tag for mobile scaling and safe-area
 - [x] Add scrollbar-none utility for clean mobile toolbar scrolling
+
+## Zoom System Rewrite
+- [x] Fix stale closure bug in handleWheel (panOffset/zoomLevel read from stale React state)
+- [x] Add panOffsetRef and zoomLevelRef that stay in sync with state for event handlers
+- [x] Remove CSS transition on canvas container (was causing lag/drift feeling)
+- [x] Fix zoom-to-cursor formula to use container rect instead of canvas rect
+- [x] Update handleFitToScreen and panning handlers to update refs immediately

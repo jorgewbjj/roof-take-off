@@ -81,6 +81,10 @@ export default function MeasurementCanvas() {
   const [cursorPosition, setCursorPosition] = useState<Point | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1.0);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+
+  // Keep refs in sync with state so event handlers always read fresh values
+  useEffect(() => { zoomLevelRef.current = zoomLevel; }, [zoomLevel]);
+  useEffect(() => { panOffsetRef.current = panOffset; }, [panOffset]);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point | null>(null);
   const [isMouseDown, setIsMouseDown] = useState(false);
@@ -113,6 +117,10 @@ export default function MeasurementCanvas() {
   const handleCanvasClickRef = useRef<((e: React.MouseEvent<HTMLCanvasElement>) => void) | null>(null);
 
   const baseScale = 2.5; // High quality PDF rendering base scale
+
+  // Refs to always have the latest zoom/pan values without stale closures
+  const panOffsetRef = useRef({ x: 0, y: 0 });
+  const zoomLevelRef = useRef(1.0);
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -215,8 +223,11 @@ export default function MeasurementCanvas() {
     const zoomToFitWidth = containerWidth / pdfWidth;
     const zoomToFitHeight = containerHeight / pdfHeight;
     // Take the smaller ratio so the PDF fits in both dimensions, no 100% cap
-    const optimalZoom = Math.min(zoomToFitWidth, zoomToFitHeight);
-    setZoomLevel(Math.max(0.1, Math.min(4.0, optimalZoom)));
+    const optimalZoom = Math.max(0.1, Math.min(4.0, Math.min(zoomToFitWidth, zoomToFitHeight)));
+    // Update refs immediately so any subsequent zoom events see fresh values
+    zoomLevelRef.current = optimalZoom;
+    panOffsetRef.current = { x: 0, y: 0 };
+    setZoomLevel(optimalZoom);
     setPanOffset({ x: 0, y: 0 });
     if (!silent) toast.success('Fit to screen');
   };
@@ -237,7 +248,6 @@ export default function MeasurementCanvas() {
       const context = canvas.getContext("2d")!;
 
       // High quality rendering: base scale 2.5 for crisp text, multiplied by zoom level
-      const baseScale = 2.5;
       const viewport = page.getViewport({ scale: baseScale * zoomLevel });
       
       // Set canvas size to match viewport
@@ -444,7 +454,9 @@ export default function MeasurementCanvas() {
       if (isPanning && panStart) {
         const dx = touch.clientX - panStart.x;
         const dy = touch.clientY - panStart.y;
-        setPanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+        const newPanTouch = { x: panOffsetRef.current.x + dx, y: panOffsetRef.current.y + dy };
+        panOffsetRef.current = newPanTouch;
+        setPanOffset(newPanTouch);
         setPanStart({ x: touch.clientX, y: touch.clientY });
       }
 
@@ -858,41 +870,43 @@ export default function MeasurementCanvas() {
   };
 
   // Handle mouse wheel zoom - zoom to cursor position
+  // Uses refs to avoid stale closure issues with rapid scroll events
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    // Calculate zoom delta (1% increment for smooth zooming)
+
+    const currentZoom = zoomLevelRef.current;
+    const currentPan = panOffsetRef.current;
+
+    // 1% increment for smooth zooming
     const delta = e.deltaY > 0 ? -0.01 : 0.01;
-    const newZoom = Math.max(0.1, Math.min(4.0, zoomLevel + delta));
-    
-    if (newZoom === zoomLevel) return; // No change, skip calculation
-    
-    // Get mouse position relative to the container (viewport)
-    const rect = canvas.getBoundingClientRect();
+    const newZoom = Math.max(0.1, Math.min(4.0, currentZoom + delta));
+    if (newZoom === currentZoom) return;
+
+    // Get the container element's bounding rect (the div that wraps the canvas)
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+
+    // Mouse position relative to the container's top-left corner
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    
-    // The canvas point under the mouse (in canvas pixel coordinates)
-    // Canvas is positioned at panOffset, so we need to account for that
-    const canvasX = mouseX - panOffset.x;
-    const canvasY = mouseY - panOffset.y;
-    
-    // After zoom, canvas size will change by ratio newZoom/zoomLevel
-    // We want the same canvas point to stay under the mouse
-    const zoomRatio = newZoom / zoomLevel;
-    
-    // New canvas position under mouse after zoom
-    const newCanvasX = canvasX * zoomRatio;
-    const newCanvasY = canvasY * zoomRatio;
-    
-    // Adjust pan offset so the canvas point stays under mouse
-    const newPanX = mouseX - newCanvasX;
-    const newPanY = mouseY - newCanvasY;
-    
+
+    // The point on the PDF that is currently under the mouse cursor.
+    // The canvas is positioned at (currentPan.x, currentPan.y) inside the container.
+    // So the PDF point under the cursor (in canvas pixel space) is:
+    const pdfX = (mouseX - currentPan.x) / currentZoom;
+    const pdfY = (mouseY - currentPan.y) / currentZoom;
+
+    // After applying newZoom, we want pdfX/pdfY to still be under the mouse.
+    // So: mouseX = pdfX * newZoom + newPanX  →  newPanX = mouseX - pdfX * newZoom
+    const newPanX = mouseX - pdfX * newZoom;
+    const newPanY = mouseY - pdfY * newZoom;
+
+    // Update both refs immediately so rapid scroll events see fresh values
+    zoomLevelRef.current = newZoom;
+    panOffsetRef.current = { x: newPanX, y: newPanY };
+
     setZoomLevel(newZoom);
     setPanOffset({ x: newPanX, y: newPanY });
   };
@@ -1679,8 +1693,9 @@ export default function MeasurementCanvas() {
           <div 
             className="relative inline-block"
             style={{
+              // No CSS transition - prevents lag/drift feeling during zoom/pan
+              transition: 'none',
               transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-              transition: isPanning ? 'none' : 'transform 0.1s ease-out'
             }}
           >
             <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg" />
@@ -1722,7 +1737,9 @@ export default function MeasurementCanvas() {
                 if (isPanning && panStart) {
                   const dx = e.clientX - panStart.x;
                   const dy = e.clientY - panStart.y;
-                  setPanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+                  const newPanMouse = { x: panOffsetRef.current.x + dx, y: panOffsetRef.current.y + dy };
+                  panOffsetRef.current = newPanMouse;
+                  setPanOffset(newPanMouse);
                   setPanStart({ x: e.clientX, y: e.clientY });
                 }
                 
