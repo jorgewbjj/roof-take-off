@@ -401,3 +401,6 @@
 
 ## PDF Export - Annotated Plan Page
 - [x] PDF export: add second page showing the actual roof plan with measurement annotations (numbers/markers drawn on top of the plan)
+
+## Bug Fix - Annotated Plan Page
+- [x] Fix: measurements (areas, lines, count markers) not visible on the annotated plan page in PDF export

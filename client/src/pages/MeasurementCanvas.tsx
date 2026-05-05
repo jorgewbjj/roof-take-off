@@ -1357,8 +1357,11 @@ export default function MeasurementCanvas() {
     // user's current zoom level.
     if (pdfDoc) {
       try {
-        // Fixed export scale: renders the full page at a consistent resolution
-        const EXPORT_SCALE = 2.0;
+        // Render the export canvas at baseScale (same as the interactive canvas base).
+        // Stored coordinates are normalized to baseScale pixel space (divided by zoomLevel
+        // when captured, leaving them at baseScale * 1px-per-PDF-unit). Rendering at
+        // baseScale means we can draw annotations with a 1:1 coordinate mapping.
+        const EXPORT_SCALE = baseScale; // 2.5 — matches stored coordinate space
 
         // Render the PDF page to an off-screen canvas
         const page = await pdfDoc.getPage(currentPage);
@@ -1372,8 +1375,8 @@ export default function MeasurementCanvas() {
         planCtx.imageSmoothingQuality = 'high';
         await page.render({ canvasContext: planCtx, viewport, canvas: planCanvas }).promise;
 
-        // Draw all saved measurements on top at EXPORT_SCALE
-        // (coordinates are stored normalised; multiply by EXPORT_SCALE to place them)
+        // Draw all saved measurements on top.
+        // Stored coordinates are already in EXPORT_SCALE pixel space — no conversion needed.
         measurements?.forEach((m) => {
           if (hiddenCategories.has(m.name) || hiddenMeasurements.has(m.id)) return;
           const coords = m.coordinates as Point[];
@@ -1382,35 +1385,48 @@ export default function MeasurementCanvas() {
           const isPoint = m.type === 'point' || (m.count !== null && m.count !== undefined);
           if (!isPoint && coords.length < 2) return;
 
-          const sc = coords.map(p => ({ x: p.x * EXPORT_SCALE, y: p.y * EXPORT_SCALE }));
+          // Coordinate mapping:
+          // When a user clicks at canvas pixel (x, y), the stored coord is x / zoomLevel.
+          // The canvas pixel x = pdf_unit * baseScale * zoomLevel, so:
+          //   stored = pdf_unit * baseScale * zoomLevel / zoomLevel = pdf_unit * baseScale
+          // The export canvas is rendered at EXPORT_SCALE = baseScale, so:
+          //   export_pixel = pdf_unit * EXPORT_SCALE = pdf_unit * baseScale = stored coord
+          // Therefore stored coords map 1:1 to export canvas pixels — NO scaling needed.
+          const sc = coords.map(p => ({ x: p.x, y: p.y }));
+
+          // Mirror the exact isLine detection from redrawOverlay
           const isLine = !isPoint && (m.perimeter === null || m.perimeter === undefined);
 
           if (isPoint) {
+            // Mirror redrawOverlay point drawing
             const pt = sc[0];
-            const r = 8;
+            const markerSize = 8;
             planCtx.beginPath();
-            planCtx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            planCtx.arc(pt.x, pt.y, markerSize, 0, Math.PI * 2);
             planCtx.fillStyle = m.color + '60';
             planCtx.fill();
             planCtx.strokeStyle = m.color;
             planCtx.lineWidth = 2;
             planCtx.stroke();
+            // X mark inside
             planCtx.strokeStyle = '#fff';
             planCtx.lineWidth = 2;
-            const off = r * 0.5;
+            const offset = markerSize * 0.5;
             planCtx.beginPath();
-            planCtx.moveTo(pt.x - off, pt.y - off);
-            planCtx.lineTo(pt.x + off, pt.y + off);
-            planCtx.moveTo(pt.x + off, pt.y - off);
-            planCtx.lineTo(pt.x - off, pt.y + off);
+            planCtx.moveTo(pt.x - offset, pt.y - offset);
+            planCtx.lineTo(pt.x + offset, pt.y + offset);
+            planCtx.moveTo(pt.x + offset, pt.y - offset);
+            planCtx.lineTo(pt.x - offset, pt.y + offset);
             planCtx.stroke();
           } else if (isLine) {
+            // Mirror redrawOverlay line drawing
             planCtx.strokeStyle = m.color;
             planCtx.lineWidth = 3;
             planCtx.beginPath();
             planCtx.moveTo(sc[0].x, sc[0].y);
             for (let i = 1; i < sc.length; i++) planCtx.lineTo(sc[i].x, sc[i].y);
             planCtx.stroke();
+            // Vertex dots
             sc.forEach(pt => {
               planCtx.beginPath();
               planCtx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
@@ -1420,16 +1436,18 @@ export default function MeasurementCanvas() {
               planCtx.lineWidth = 2;
               planCtx.stroke();
             });
+            // Label — scale fonts up for the high-res export canvas
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
             planCtx.fillStyle = '#000';
-            planCtx.fillRect(cx - 55, cy - 22, 110, 32);
+            planCtx.fillRect(cx - 160, cy - 35, 320, 70);
             planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 12px sans-serif';
+            planCtx.font = 'bold 36px sans-serif';
             planCtx.textAlign = 'center';
             planCtx.textBaseline = 'middle';
             planCtx.fillText(`${m.area} ${scaleUnit}`, cx, cy);
           } else {
+            // Mirror redrawOverlay area drawing
             planCtx.fillStyle = m.color + '40';
             planCtx.strokeStyle = m.color;
             planCtx.lineWidth = 2;
@@ -1439,17 +1457,18 @@ export default function MeasurementCanvas() {
             planCtx.closePath();
             planCtx.fill();
             planCtx.stroke();
+            // Label — scale fonts up for the high-res export canvas
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
             planCtx.fillStyle = '#000';
-            planCtx.fillRect(cx - 65, cy - 28, 130, 44);
+            planCtx.fillRect(cx - 180, cy - 50, 360, 100);
             planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 13px sans-serif';
+            planCtx.font = 'bold 38px sans-serif';
             planCtx.textAlign = 'center';
             planCtx.textBaseline = 'middle';
-            planCtx.fillText(m.name, cx, cy - 9);
-            planCtx.font = '12px sans-serif';
-            planCtx.fillText(`${m.area} ${scaleUnit}²`, cx, cy + 9);
+            planCtx.fillText(m.name, cx, cy - 18);
+            planCtx.font = '34px sans-serif';
+            planCtx.fillText(`${m.area} ${scaleUnit}²`, cx, cy + 26);
           }
         });
 
