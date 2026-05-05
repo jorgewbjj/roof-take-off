@@ -398,3 +398,6 @@
 - [x] Remove CSS transition on canvas container (was causing lag/drift feeling)
 - [x] Fix zoom-to-cursor formula to use container rect instead of canvas rect
 - [x] Update handleFitToScreen and panning handlers to update refs immediately
+
+## PDF Export - Annotated Plan Page
+- [x] PDF export: add second page showing the actual roof plan with measurement annotations (numbers/markers drawn on top of the plan)

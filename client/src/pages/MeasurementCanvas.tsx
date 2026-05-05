@@ -1244,7 +1244,7 @@ export default function MeasurementCanvas() {
   };
 
   // Export measurements to PDF
-  const exportMeasurementsPDF = () => {
+  const exportMeasurementsPDF = async () => {
     if (!measurements || measurements.length === 0) {
       toast.error("No measurements to export");
       return;
@@ -1350,6 +1350,149 @@ export default function MeasurementCanvas() {
 
         yPos += 8;
       });
+
+    // ── Page 2: Annotated Plan ──────────────────────────────────────────────
+    // Re-render the PDF page at a fixed export scale and draw all annotations on top.
+    // This ensures the annotated plan is crisp and full-quality regardless of the
+    // user's current zoom level.
+    if (pdfDoc) {
+      try {
+        // Fixed export scale: renders the full page at a consistent resolution
+        const EXPORT_SCALE = 2.0;
+
+        // Render the PDF page to an off-screen canvas
+        const page = await pdfDoc.getPage(currentPage);
+        const viewport = page.getViewport({ scale: EXPORT_SCALE });
+
+        const planCanvas = document.createElement('canvas');
+        planCanvas.width = viewport.width;
+        planCanvas.height = viewport.height;
+        const planCtx = planCanvas.getContext('2d')!;
+        planCtx.imageSmoothingEnabled = true;
+        planCtx.imageSmoothingQuality = 'high';
+        await page.render({ canvasContext: planCtx, viewport, canvas: planCanvas }).promise;
+
+        // Draw all saved measurements on top at EXPORT_SCALE
+        // (coordinates are stored normalised; multiply by EXPORT_SCALE to place them)
+        measurements?.forEach((m) => {
+          if (hiddenCategories.has(m.name) || hiddenMeasurements.has(m.id)) return;
+          const coords = m.coordinates as Point[];
+          if (coords.length < 1) return;
+
+          const isPoint = m.type === 'point' || (m.count !== null && m.count !== undefined);
+          if (!isPoint && coords.length < 2) return;
+
+          const sc = coords.map(p => ({ x: p.x * EXPORT_SCALE, y: p.y * EXPORT_SCALE }));
+          const isLine = !isPoint && (m.perimeter === null || m.perimeter === undefined);
+
+          if (isPoint) {
+            const pt = sc[0];
+            const r = 8;
+            planCtx.beginPath();
+            planCtx.arc(pt.x, pt.y, r, 0, Math.PI * 2);
+            planCtx.fillStyle = m.color + '60';
+            planCtx.fill();
+            planCtx.strokeStyle = m.color;
+            planCtx.lineWidth = 2;
+            planCtx.stroke();
+            planCtx.strokeStyle = '#fff';
+            planCtx.lineWidth = 2;
+            const off = r * 0.5;
+            planCtx.beginPath();
+            planCtx.moveTo(pt.x - off, pt.y - off);
+            planCtx.lineTo(pt.x + off, pt.y + off);
+            planCtx.moveTo(pt.x + off, pt.y - off);
+            planCtx.lineTo(pt.x - off, pt.y + off);
+            planCtx.stroke();
+          } else if (isLine) {
+            planCtx.strokeStyle = m.color;
+            planCtx.lineWidth = 3;
+            planCtx.beginPath();
+            planCtx.moveTo(sc[0].x, sc[0].y);
+            for (let i = 1; i < sc.length; i++) planCtx.lineTo(sc[i].x, sc[i].y);
+            planCtx.stroke();
+            sc.forEach(pt => {
+              planCtx.beginPath();
+              planCtx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+              planCtx.fillStyle = m.color;
+              planCtx.fill();
+              planCtx.strokeStyle = '#fff';
+              planCtx.lineWidth = 2;
+              planCtx.stroke();
+            });
+            const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
+            const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
+            planCtx.fillStyle = '#000';
+            planCtx.fillRect(cx - 55, cy - 22, 110, 32);
+            planCtx.fillStyle = '#fff';
+            planCtx.font = 'bold 12px sans-serif';
+            planCtx.textAlign = 'center';
+            planCtx.textBaseline = 'middle';
+            planCtx.fillText(`${m.area} ${scaleUnit}`, cx, cy);
+          } else {
+            planCtx.fillStyle = m.color + '40';
+            planCtx.strokeStyle = m.color;
+            planCtx.lineWidth = 2;
+            planCtx.beginPath();
+            planCtx.moveTo(sc[0].x, sc[0].y);
+            sc.forEach(pt => planCtx.lineTo(pt.x, pt.y));
+            planCtx.closePath();
+            planCtx.fill();
+            planCtx.stroke();
+            const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
+            const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
+            planCtx.fillStyle = '#000';
+            planCtx.fillRect(cx - 65, cy - 28, 130, 44);
+            planCtx.fillStyle = '#fff';
+            planCtx.font = 'bold 13px sans-serif';
+            planCtx.textAlign = 'center';
+            planCtx.textBaseline = 'middle';
+            planCtx.fillText(m.name, cx, cy - 9);
+            planCtx.font = '12px sans-serif';
+            planCtx.fillText(`${m.area} ${scaleUnit}²`, cx, cy + 9);
+          }
+        });
+
+        // Convert composited canvas to JPEG
+        const dataUrl = planCanvas.toDataURL('image/jpeg', 0.92);
+
+        // Add a new page matching the plan orientation
+        const isLandscape = planCanvas.width > planCanvas.height;
+        doc.addPage(isLandscape ? 'l' : 'p');
+
+        const p2Width = doc.internal.pageSize.getWidth();
+        const p2Height = doc.internal.pageSize.getHeight();
+        const innerMargin = 10;
+        const availW = p2Width - innerMargin * 2;
+        const availH = p2Height - innerMargin * 2 - 12; // 12pt for title
+
+        // Fit image within available area preserving aspect ratio
+        const imgAspect = planCanvas.width / planCanvas.height;
+        const boxAspect = availW / availH;
+        let imgW: number, imgH: number;
+        if (imgAspect > boxAspect) {
+          imgW = availW;
+          imgH = availW / imgAspect;
+        } else {
+          imgH = availH;
+          imgW = availH * imgAspect;
+        }
+
+        // Center horizontally
+        const imgX = innerMargin + (availW - imgW) / 2;
+        const imgY = innerMargin + 12;
+
+        // Page title
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text('Annotated Plan', innerMargin, innerMargin + 8);
+
+        doc.addImage(dataUrl, 'JPEG', imgX, imgY, imgW, imgH);
+      } catch (err) {
+        console.warn('Could not add annotated plan page to PDF:', err);
+      }
+    }
 
     // Save PDF
     doc.save(`${project?.name || "measurements"}.pdf`);
