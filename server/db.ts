@@ -221,3 +221,12 @@ export async function createCountingCategory(category: InsertCountingCategory) {
   const result = await db.insert(countingCategories).values(category);
   return result[0].insertId;
 }
+
+export async function deleteCountingCategory(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Only allow deletion of categories owned by this user
+  await db.delete(countingCategories).where(
+    and(eq(countingCategories.id, id), eq(countingCategories.userId, userId))
+  );
+}

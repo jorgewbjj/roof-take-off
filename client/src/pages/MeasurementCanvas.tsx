@@ -1165,10 +1165,22 @@ export default function MeasurementCanvas() {
   };
 
   // Save measurement
-  const saveMeasurement = () => {
+  const saveMeasurement = async () => {
     if (!measurementName.trim()) {
       toast.error("Please enter a name for this measurement");
       return;
+    }
+
+    // If a custom category name was entered, persist it to the DB so it
+    // appears in all future projects for this user.
+    if (isCustomCategory && measurementName.trim()) {
+      try {
+        await createCategoryMutation.mutateAsync({ name: measurementName.trim() });
+        await utils.countingCategories.list.invalidate();
+      } catch {
+        // Non-fatal: category may already exist (duplicate guard on server).
+        // Continue saving the measurement regardless.
+      }
     }
 
     // Determine if this is a line or area measurement
@@ -1789,20 +1801,42 @@ export default function MeasurementCanvas() {
           {isDrawing && (
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-muted-foreground">Category:</span>
-              <Select value={selectedCategory} onValueChange={(value) => {
-                setSelectedCategory(value);
-                setMeasurementName(value);
-                setIsCustomCategory(value === "Other");
-              }}>
-                <SelectTrigger className="w-40 h-8">
+              <Select
+                value={isCustomCategory ? "Other" : selectedCategory}
+                onValueChange={(value) => {
+                  if (value === "Other") {
+                    setIsCustomCategory(true);
+                    setSelectedCategory("");
+                    setMeasurementName("");
+                  } else {
+                    setIsCustomCategory(false);
+                    setSelectedCategory(value);
+                    setMeasurementName(value);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-44 h-8">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PRESET_CATEGORIES.map((category) => (
+                  {/* Built-in preset categories */}
+                  {PRESET_CATEGORIES.filter(c => c !== 'Other').map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
                     </SelectItem>
                   ))}
+                  {/* User's saved custom categories — shared across all projects */}
+                  {customCategories.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">My Categories</div>
+                      {customCategories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  <SelectItem value="Other">Other (Create New)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2315,11 +2349,24 @@ export default function MeasurementCanvas() {
                   <SelectValue placeholder="Select a category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {PRESET_CATEGORIES.map((category) => (
+                  {/* Built-in preset categories (excluding 'Other' — handled below) */}
+                  {PRESET_CATEGORIES.filter(c => c !== 'Other').map((category) => (
                     <SelectItem key={category} value={category}>
                       {category}
                     </SelectItem>
                   ))}
+                  {/* User's saved custom categories — available across all projects */}
+                  {customCategories.length > 0 && (
+                    <>
+                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">My Categories</div>
+                      {customCategories.map((category) => (
+                        <SelectItem key={category.id} value={category.name}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  <SelectItem value="Other">Other (Create New)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -2334,6 +2381,7 @@ export default function MeasurementCanvas() {
                   placeholder="Enter custom category name"
                   autoFocus
                 />
+                <p className="text-xs text-muted-foreground">This category will be saved and available in all your future projects.</p>
               </div>
             )}
           </div>
@@ -2344,7 +2392,7 @@ export default function MeasurementCanvas() {
             }}>
               Cancel
             </Button>
-            <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending}>
+            <Button onClick={saveMeasurement} disabled={createMeasurementMutation.isPending || createCategoryMutation.isPending}>
               {createMeasurementMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Save
             </Button>

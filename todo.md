@@ -407,3 +407,9 @@
 
 ## PDF Export - Labels for All Categories
 - [x] Add annotation labels (name + value boxes) to ALL measurement types on the annotated plan page: areas, lines, and count/point markers
+
+## Custom Categories - Persistent & Shared
+- [x] Custom categories created via "Other" must be saved to the database and available across all projects
+- [x] Load user's custom categories from DB and merge with built-in categories in the measurement tool
+- [x] tRPC procedures: getCustomCategories, createCustomCategory, deleteCustomCategory
+- [x] DB migration: user_categories table (reused existing countingCategories table)

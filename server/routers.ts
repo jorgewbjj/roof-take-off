@@ -152,11 +152,27 @@ export const appRouter = router({
         name: z.string().min(1).max(255),
       }))
       .mutation(async ({ ctx, input }) => {
+        // Prevent duplicate names for this user
+        const existing = await db.getUserCountingCategories(ctx.user.id);
+        const duplicate = existing.find(
+          (c) => c.name.toLowerCase() === input.name.trim().toLowerCase()
+        );
+        if (duplicate) {
+          // Return the existing category id instead of creating a duplicate
+          return { id: duplicate.id };
+        }
         const categoryId = await db.createCountingCategory({
           userId: ctx.user.id,
-          name: input.name,
+          name: input.name.trim(),
         });
         return { id: categoryId };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deleteCountingCategory(input.id, ctx.user.id);
+        return { success: true };
       }),
   }),
 });
