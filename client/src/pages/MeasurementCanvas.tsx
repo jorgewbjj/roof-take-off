@@ -1398,54 +1398,70 @@ export default function MeasurementCanvas() {
           const isLine = !isPoint && (m.perimeter === null || m.perimeter === undefined);
 
           if (isPoint) {
-            // Mirror redrawOverlay point drawing
+            // Scale up marker size for the high-res export canvas (baseScale=2.5 vs screen)
+            const markerSize = 30;
             const pt = sc[0];
-            const markerSize = 8;
             planCtx.beginPath();
             planCtx.arc(pt.x, pt.y, markerSize, 0, Math.PI * 2);
             planCtx.fillStyle = m.color + '60';
             planCtx.fill();
             planCtx.strokeStyle = m.color;
-            planCtx.lineWidth = 2;
+            planCtx.lineWidth = 4;
             planCtx.stroke();
             // X mark inside
             planCtx.strokeStyle = '#fff';
-            planCtx.lineWidth = 2;
-            const offset = markerSize * 0.5;
+            planCtx.lineWidth = 4;
+            const xOff = markerSize * 0.55;
             planCtx.beginPath();
-            planCtx.moveTo(pt.x - offset, pt.y - offset);
-            planCtx.lineTo(pt.x + offset, pt.y + offset);
-            planCtx.moveTo(pt.x + offset, pt.y - offset);
-            planCtx.lineTo(pt.x - offset, pt.y + offset);
+            planCtx.moveTo(pt.x - xOff, pt.y - xOff);
+            planCtx.lineTo(pt.x + xOff, pt.y + xOff);
+            planCtx.moveTo(pt.x + xOff, pt.y - xOff);
+            planCtx.lineTo(pt.x - xOff, pt.y + xOff);
             planCtx.stroke();
+            // Label box: category name + count number to the right of the marker
+            const lx = pt.x + markerSize + 10;
+            const ly = pt.y;
+            planCtx.fillStyle = m.color;
+            planCtx.fillRect(lx, ly - 40, 280, 80);
+            planCtx.fillStyle = '#fff';
+            planCtx.font = 'bold 34px sans-serif';
+            planCtx.textAlign = 'left';
+            planCtx.textBaseline = 'middle';
+            // Truncate long names to fit in box
+            const pointName = m.name.length > 12 ? m.name.slice(0, 12) + '…' : m.name;
+            planCtx.fillText(pointName, lx + 10, ly - 12);
+            planCtx.font = '30px sans-serif';
+            planCtx.fillText(`#${m.count ?? 1}`, lx + 10, ly + 22);
           } else if (isLine) {
-            // Mirror redrawOverlay line drawing
+            // Mirror redrawOverlay line drawing — scale up line width for export canvas
             planCtx.strokeStyle = m.color;
-            planCtx.lineWidth = 3;
+            planCtx.lineWidth = 6;
             planCtx.beginPath();
             planCtx.moveTo(sc[0].x, sc[0].y);
             for (let i = 1; i < sc.length; i++) planCtx.lineTo(sc[i].x, sc[i].y);
             planCtx.stroke();
-            // Vertex dots
+            // Vertex dots — scale up for export canvas
             sc.forEach(pt => {
               planCtx.beginPath();
-              planCtx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+              planCtx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
               planCtx.fillStyle = m.color;
               planCtx.fill();
               planCtx.strokeStyle = '#fff';
-              planCtx.lineWidth = 2;
+              planCtx.lineWidth = 3;
               planCtx.stroke();
             });
-            // Label — scale fonts up for the high-res export canvas
+            // Label — name + distance value, centered on polyline midpoint
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
             planCtx.fillStyle = '#000';
-            planCtx.fillRect(cx - 160, cy - 35, 320, 70);
+            planCtx.fillRect(cx - 180, cy - 50, 360, 100);
             planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 36px sans-serif';
+            planCtx.font = 'bold 38px sans-serif';
             planCtx.textAlign = 'center';
             planCtx.textBaseline = 'middle';
-            planCtx.fillText(`${m.area} ${scaleUnit}`, cx, cy);
+            planCtx.fillText(m.name, cx, cy - 18);
+            planCtx.font = '34px sans-serif';
+            planCtx.fillText(`${m.area} ${scaleUnit}`, cx, cy + 26);
           } else {
             // Mirror redrawOverlay area drawing
             planCtx.fillStyle = m.color + '40';

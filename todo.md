@@ -404,3 +404,6 @@
 
 ## Bug Fix - Annotated Plan Page
 - [x] Fix: measurements (areas, lines, count markers) not visible on the annotated plan page in PDF export
+
+## PDF Export - Labels for All Categories
+- [x] Add annotation labels (name + value boxes) to ALL measurement types on the annotated plan page: areas, lines, and count/point markers
