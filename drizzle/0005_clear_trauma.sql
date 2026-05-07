@@ -1,0 +1,1 @@
+ALTER TABLE `countingCategories` ADD `measurementType` enum('area','linear','count') DEFAULT 'count' NOT NULL;

@@ -73,6 +73,14 @@ export const countingCategories = mysqlTable("countingCategories", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(), // Owner of this custom category
   name: varchar("name", { length: 255 }).notNull(), // Category name (e.g., "Vents", "Drains")
+  /**
+   * measurementType determines which drawing mode is activated when this category is selected:
+   *   'area'   → polygon drawing (sq ft)
+   *   'linear' → polyline drawing (linear ft)
+   *   'count'  → point counting (item count)
+   * Defaults to 'count' for backward compatibility with existing custom counting categories.
+   */
+  measurementType: mysqlEnum("measurementType", ["area", "linear", "count"]).default("count").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

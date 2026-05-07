@@ -150,6 +150,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({
         name: z.string().min(1).max(255),
+        measurementType: z.enum(['area', 'linear', 'count']).default('count'),
       }))
       .mutation(async ({ ctx, input }) => {
         // Prevent duplicate names for this user
@@ -158,14 +159,32 @@ export const appRouter = router({
           (c) => c.name.toLowerCase() === input.name.trim().toLowerCase()
         );
         if (duplicate) {
-          // Return the existing category id instead of creating a duplicate
+          // If the type changed, update it; otherwise return existing id
+          if (duplicate.measurementType !== input.measurementType) {
+            await db.updateCountingCategory(duplicate.id, ctx.user.id, {
+              measurementType: input.measurementType,
+            });
+          }
           return { id: duplicate.id };
         }
         const categoryId = await db.createCountingCategory({
           userId: ctx.user.id,
           name: input.name.trim(),
+          measurementType: input.measurementType,
         });
         return { id: categoryId };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        measurementType: z.enum(['area', 'linear', 'count']).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...updates } = input;
+        await db.updateCountingCategory(id, ctx.user.id, updates);
+        return { success: true };
       }),
 
     delete: protectedProcedure

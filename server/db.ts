@@ -222,6 +222,19 @@ export async function createCountingCategory(category: InsertCountingCategory) {
   return result[0].insertId;
 }
 
+export async function updateCountingCategory(
+  id: number,
+  userId: number,
+  updates: { name?: string; measurementType?: 'area' | 'linear' | 'count' }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Only allow updates to categories owned by this user
+  await db.update(countingCategories)
+    .set(updates)
+    .where(and(eq(countingCategories.id, id), eq(countingCategories.userId, userId)));
+}
+
 export async function deleteCountingCategory(id: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2 } from "lucide-react";
+import CategoryManager from "@/components/CategoryManager";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
@@ -109,6 +110,7 @@ export default function MeasurementCanvas() {
     coordinates: Point[];
   } | null>(null);
   // Touch gesture state
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // mobile bottom drawer
   const lastTouchDistanceRef = useRef<number | null>(null); // for pinch-to-zoom
   const lastTouchCenterRef = useRef<Point | null>(null); // for pinch center
@@ -1663,6 +1665,16 @@ export default function MeasurementCanvas() {
               <ChevronRight className="w-4 h-4" />
               <span className="ml-1 text-xs">Measurements</span>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setShowCategoryManager(true)}
+              title="Manage Categories"
+            >
+              <Settings2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Categories</span>
+            </Button>
             <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
@@ -1812,6 +1824,14 @@ export default function MeasurementCanvas() {
                     setIsCustomCategory(false);
                     setSelectedCategory(value);
                     setMeasurementName(value);
+                    // Auto-switch drawing mode based on category measurementType
+                    const customCat = customCategories.find(c => c.name === value);
+                    if (customCat && customCat.measurementType === 'count') {
+                      // Switch to count mode for count-type custom categories
+                      setIsDrawing(false);
+                      setCurrentPolygon([]);
+                      setShowCountCategoryDialog(true);
+                    }
                   }
                 }}
               >
@@ -2569,6 +2589,12 @@ export default function MeasurementCanvas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Category Manager Dialog */}
+      <CategoryManager
+        open={showCategoryManager}
+        onOpenChange={setShowCategoryManager}
+      />
 
       {/* Calibration Dialog */}
       <Dialog open={isCalibrationDialogOpen} onOpenChange={setIsCalibrationDialogOpen}>

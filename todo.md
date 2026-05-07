@@ -413,3 +413,12 @@
 - [x] Load user's custom categories from DB and merge with built-in categories in the measurement tool
 - [x] tRPC procedures: getCustomCategories, createCustomCategory, deleteCustomCategory
 - [x] DB migration: user_categories table (reused existing countingCategories table)
+
+## Category Manager
+- [x] Add measurementType field to countingCategories schema (area | linear | count) + DB migration
+- [x] Update DB helpers and tRPC router for category type (create, update, list with type)
+- [x] Build Category Manager dialog: view all categories, create new, edit type, delete
+- [x] Add "Manage Categories" button in MeasurementCanvas toolbar
+- [x] Wire category type to auto-select drawing mode (area→draw polygon, linear→draw line, count→count mode)
+- [x] Built-in preset categories also get a default type (Roofing Field=area, Gutter=linear, Curbs=count, etc.)
+- [x] Vitest tests for category type CRUD
