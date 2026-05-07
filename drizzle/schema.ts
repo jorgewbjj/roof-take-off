@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, decimal } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, json, decimal, float } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -86,3 +86,34 @@ export const countingCategories = mysqlTable("countingCategories", {
 
 export type CountingCategory = typeof countingCategories.$inferSelect;
 export type InsertCountingCategory = typeof countingCategories.$inferInsert;
+
+/**
+ * Text Annotations table - stores draggable/resizable text boxes placed on the PDF plan
+ * Coordinates are stored in baseScale pixel space (same as measurement coordinates)
+ */
+export const textAnnotations = mysqlTable("textAnnotations", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  pageNumber: int("pageNumber").default(1).notNull(),
+  /** X position in baseScale pixel space (same coordinate system as measurements) */
+  x: float("x").notNull(),
+  /** Y position in baseScale pixel space */
+  y: float("y").notNull(),
+  /** Width in baseScale pixels */
+  width: float("width").notNull().default(200),
+  /** Height in baseScale pixels */
+  height: float("height").notNull().default(80),
+  /** The text content */
+  content: varchar("content", { length: 2000 }).notNull().default("Text"),
+  /** Font size in baseScale pixels (e.g. 24 = ~10pt at export scale) */
+  fontSize: int("fontSize").notNull().default(24),
+  /** Text color as hex */
+  textColor: varchar("textColor", { length: 7 }).notNull().default("#000000"),
+  /** Background color as hex, or 'transparent' */
+  bgColor: varchar("bgColor", { length: 20 }).notNull().default("#ffffff"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TextAnnotation = typeof textAnnotations.$inferSelect;
+export type InsertTextAnnotation = typeof textAnnotations.$inferInsert;

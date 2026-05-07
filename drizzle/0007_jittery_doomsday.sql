@@ -1,0 +1,1 @@
+ALTER TABLE `textAnnotations` MODIFY COLUMN `content` varchar(2000) NOT NULL DEFAULT 'Text';

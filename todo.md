@@ -422,3 +422,12 @@
 - [x] Wire category type to auto-select drawing mode (area→draw polygon, linear→draw line, count→count mode)
 - [x] Built-in preset categories also get a default type (Roofing Field=area, Gutter=linear, Curbs=count, etc.)
 - [x] Vitest tests for category type CRUD
+
+## Text Box Annotation Tool
+- [x] Schema: add textAnnotations table (projectId, pageNumber, x, y, width, height, text, fontSize, color)
+- [x] DB helpers: createTextAnnotation, updateTextAnnotation, deleteTextAnnotation, getProjectTextAnnotations
+- [x] tRPC procedures: textAnnotations.list, create, update, delete
+- [x] Canvas: Text tool mode button in toolbar, click-to-place, drag-to-move, corner-handle resize, double-click to edit
+- [x] Canvas: render text boxes on overlay canvas with selection handles
+- [x] PDF export: render text boxes on annotated plan page (page 2) at correct export scale
+- [x] Vitest tests for text annotation CRUD procedures

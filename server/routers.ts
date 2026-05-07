@@ -142,6 +142,70 @@ export const appRouter = router({
       }),
   }),
 
+  textAnnotations: router({
+    list: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        // Verify user owns this project before returning annotations
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        return db.getProjectTextAnnotations(input.projectId);
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        pageNumber: z.number().default(1),
+        x: z.number(),
+        y: z.number(),
+        width: z.number().default(200),
+        height: z.number().default(80),
+        content: z.string().max(2000).default('Text'),
+        fontSize: z.number().min(8).max(200).default(24),
+        textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).default('#000000'),
+        bgColor: z.string().default('#ffffff'),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify ownership
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const id = await db.createTextAnnotation(input);
+        return { id };
+      }),
+
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        projectId: z.number(),
+        x: z.number().optional(),
+        y: z.number().optional(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+        content: z.string().max(2000).optional(),
+        fontSize: z.number().min(8).max(200).optional(),
+        textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+        bgColor: z.string().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify ownership via project
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const { id, projectId, ...updates } = input;
+        await db.updateTextAnnotation(id, projectId, updates);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        // Verify ownership via project
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        await db.deleteTextAnnotation(input.id, input.projectId);
+        return { success: true };
+      }),
+  }),
+
   countingCategories: router({
     list: protectedProcedure.query(async ({ ctx }) => {
       return db.getUserCountingCategories(ctx.user.id);

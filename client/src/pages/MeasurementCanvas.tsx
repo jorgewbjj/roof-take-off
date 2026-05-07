@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2, Type, X } from "lucide-react";
 import CategoryManager from "@/components/CategoryManager";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -112,6 +112,16 @@ export default function MeasurementCanvas() {
   // Touch gesture state
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // mobile bottom drawer
+
+  // ─── Text Annotation state ────────────────────────────────────────────────────
+  const [isTextMode, setIsTextMode] = useState(false);
+  const [selectedTextId, setSelectedTextId] = useState<number | null>(null);
+  const [draggingTextId, setDraggingTextId] = useState<number | null>(null);
+  const [textDragStart, setTextDragStart] = useState<{ mouseX: number; mouseY: number; origX: number; origY: number } | null>(null);
+  const [resizingTextId, setResizingTextId] = useState<number | null>(null);
+  const [textResizeStart, setTextResizeStart] = useState<{ mouseX: number; mouseY: number; origW: number; origH: number } | null>(null);
+  const [editingTextId, setEditingTextId] = useState<number | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState("");
   const lastTouchDistanceRef = useRef<number | null>(null); // for pinch-to-zoom
   const lastTouchCenterRef = useRef<Point | null>(null); // for pinch center
   const touchStartRef = useRef<Point | null>(null); // for single-finger pan
@@ -127,6 +137,16 @@ export default function MeasurementCanvas() {
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
   const { data: measurements, isLoading: measurementsLoading } = trpc.measurements.list.useQuery({ projectId });
+  const { data: textAnnotationsList = [] } = trpc.textAnnotations.list.useQuery({ projectId });
+  const createTextAnnotationMutation = trpc.textAnnotations.create.useMutation({
+    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
+  });
+  const updateTextAnnotationMutation = trpc.textAnnotations.update.useMutation({
+    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
+  });
+  const deleteTextAnnotationMutation = trpc.textAnnotations.delete.useMutation({
+    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
+  });
 
   const updateProjectMutation = trpc.projects.update.useMutation({
     onSuccess: () => {
@@ -806,6 +826,68 @@ export default function MeasurementCanvas() {
       }
     }
 
+    // Draw text annotations
+    textAnnotationsList.forEach((ann) => {
+      if (ann.pageNumber !== currentPage) return;
+      // Coordinates stored in baseScale pixel space — scale by zoomLevel for display
+      const sx = ann.x * zoomLevel;
+      const sy = ann.y * zoomLevel;
+      const sw = ann.width * zoomLevel;
+      const sh = ann.height * zoomLevel;
+      const isSelected = selectedTextId === ann.id;
+
+      // Background
+      ctx.fillStyle = ann.bgColor === 'transparent' ? 'rgba(255,255,255,0.85)' : ann.bgColor;
+      ctx.fillRect(sx, sy, sw, sh);
+
+      // Border
+      ctx.strokeStyle = isSelected ? '#3b82f6' : '#374151';
+      ctx.lineWidth = isSelected ? 2.5 : 1.5;
+      ctx.strokeRect(sx, sy, sw, sh);
+
+      // Text content — word-wrap inside box
+      const padding = 8 * zoomLevel;
+      const fontSize = Math.max(8, ann.fontSize * zoomLevel);
+      ctx.fillStyle = ann.textColor;
+      ctx.font = `${fontSize}px sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      // Simple single-line clipped text (full wrap would need more logic)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(sx + padding, sy + padding, sw - padding * 2, sh - padding * 2);
+      ctx.clip();
+      // Multi-line word wrap
+      const words = ann.content.split(' ');
+      let line = '';
+      let lineY = sy + padding;
+      const lineHeight = fontSize * 1.3;
+      for (const word of words) {
+        const testLine = line ? line + ' ' + word : word;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > sw - padding * 2 && line) {
+          ctx.fillText(line, sx + padding, lineY);
+          line = word;
+          lineY += lineHeight;
+          if (lineY + lineHeight > sy + sh) break;
+        } else {
+          line = testLine;
+        }
+      }
+      if (line) ctx.fillText(line, sx + padding, lineY);
+      ctx.restore();
+
+      // Resize handle (bottom-right corner) — only when selected or in text mode
+      if (isSelected || isTextMode) {
+        const hSize = Math.max(10, 12 * zoomLevel);
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(sx + sw - hSize, sy + sh - hSize, hSize, hSize);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(sx + sw - hSize, sy + sh - hSize, hSize, hSize);
+      }
+    });
+
     // Draw crosshair cursor
     if (isDrawing && cursorPosition) {
       // Check if cursor is near a snap point
@@ -850,7 +932,22 @@ export default function MeasurementCanvas() {
 
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements]);
+  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage]);
+
+  // Delete selected text annotation with Delete/Backspace key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTextId !== null && editingTextId === null) {
+        // Don't delete if focus is in an input/textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        deleteTextAnnotationMutation.mutate({ id: selectedTextId, projectId });
+        setSelectedTextId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTextId, editingTextId, projectId]);
 
   // Zoom controls - keep PDF centered and stable
   const zoomAtPoint = (newZoom: number, clientX?: number, clientY?: number) => {
@@ -928,6 +1025,41 @@ export default function MeasurementCanvas() {
       return;
     }
 
+    // Text mode: check for resize handle or drag on existing text boxes
+    if (isTextMode || selectedTextId !== null) {
+      const normalizedX = x / zoomLevel;
+      const normalizedY = y / zoomLevel;
+      // Check resize handle first (bottom-right 16px corner)
+      const HANDLE = 16;
+      const resizeTarget = textAnnotationsList.find((ann) => {
+        if (ann.pageNumber !== currentPage) return false;
+        const rx = ann.x + ann.width - HANDLE;
+        const ry = ann.y + ann.height - HANDLE;
+        return normalizedX >= rx && normalizedX <= ann.x + ann.width &&
+               normalizedY >= ry && normalizedY <= ann.y + ann.height;
+      });
+      if (resizeTarget) {
+        setResizingTextId(resizeTarget.id);
+        setTextResizeStart({ mouseX: x, mouseY: y, origW: resizeTarget.width, origH: resizeTarget.height });
+        setSelectedTextId(resizeTarget.id);
+        return;
+      }
+      // Check drag (anywhere inside the box)
+      const dragTarget = textAnnotationsList.find((ann) => {
+        if (ann.pageNumber !== currentPage) return false;
+        return normalizedX >= ann.x && normalizedX <= ann.x + ann.width &&
+               normalizedY >= ann.y && normalizedY <= ann.y + ann.height;
+      });
+      if (dragTarget) {
+        setDraggingTextId(dragTarget.id);
+        setTextDragStart({ mouseX: x, mouseY: y, origX: dragTarget.x, origY: dragTarget.y });
+        setSelectedTextId(dragTarget.id);
+        return;
+      }
+      // Clicked on empty area — deselect
+      if (!isTextMode) setSelectedTextId(null);
+    }
+
     // Edit mode: check if clicking on a vertex
     if (isEditMode && selectedMeasurementId && measurements) {
       const selectedMeasurement = measurements.find(m => m.id === selectedMeasurementId);
@@ -958,6 +1090,26 @@ export default function MeasurementCanvas() {
 
   // Handle mouse up
   const handleMouseUp = () => {
+    // Save text annotation position/size on mouse up
+    if (draggingTextId !== null && textDragStart) {
+      const ann = textAnnotationsList.find(a => a.id === draggingTextId);
+      if (ann) {
+        updateTextAnnotationMutation.mutate({ id: draggingTextId, projectId, x: ann.x, y: ann.y });
+      }
+      setDraggingTextId(null);
+      setTextDragStart(null);
+      return;
+    }
+    if (resizingTextId !== null && textResizeStart) {
+      const ann = textAnnotationsList.find(a => a.id === resizingTextId);
+      if (ann) {
+        updateTextAnnotationMutation.mutate({ id: resizingTextId, projectId, width: ann.width, height: ann.height });
+      }
+      setResizingTextId(null);
+      setTextResizeStart(null);
+      return;
+    }
+
     if (draggingVertexIndex !== null && selectedMeasurementId && measurements) {
       // Save the updated measurement
       const selectedMeasurement = measurements.find(m => m.id === selectedMeasurementId);
@@ -1019,6 +1171,43 @@ export default function MeasurementCanvas() {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // Text mode: place a new text annotation on click
+    if (isTextMode) {
+      const normalizedX = x / zoomLevel;
+      const normalizedY = y / zoomLevel;
+      // Check if clicking on an existing text box to select it
+      const clicked = textAnnotationsList.find((ann) => {
+        if (ann.pageNumber !== currentPage) return false;
+        return normalizedX >= ann.x && normalizedX <= ann.x + ann.width &&
+               normalizedY >= ann.y && normalizedY <= ann.y + ann.height;
+      });
+      if (clicked) {
+        setSelectedTextId(clicked.id);
+        return;
+      }
+      // No existing box clicked — create a new one
+      createTextAnnotationMutation.mutate({
+        projectId,
+        pageNumber: currentPage,
+        x: normalizedX,
+        y: normalizedY,
+        width: 200,
+        height: 80,
+        content: 'Text',
+        fontSize: 24,
+        textColor: '#000000',
+        bgColor: '#ffffff',
+      }, {
+        onSuccess: (data) => {
+          setSelectedTextId(data.id);
+          // Immediately open inline editor
+          setEditingTextId(data.id);
+          setEditingTextValue('Text');
+        }
+      });
+      return;
+    }
 
     // Calibration mode: collect two points
     if (isCalibrating) {
@@ -1502,6 +1691,48 @@ export default function MeasurementCanvas() {
           }
         });
 
+        // Draw text annotations on the export canvas
+        const pageTextAnnotations = textAnnotationsList.filter(a => a.pageNumber === currentPage);
+        pageTextAnnotations.forEach((ann) => {
+          // Coordinates are in baseScale pixel space — 1:1 with export canvas
+          const { x, y, width, height, content, fontSize, textColor, bgColor } = ann;
+          // Background
+          planCtx.fillStyle = bgColor === 'transparent' ? 'rgba(255,255,255,0.9)' : bgColor;
+          planCtx.fillRect(x, y, width, height);
+          // Border
+          planCtx.strokeStyle = '#374151';
+          planCtx.lineWidth = 2;
+          planCtx.strokeRect(x, y, width, height);
+          // Text
+          const padding = 10;
+          const fs = Math.max(12, fontSize);
+          planCtx.fillStyle = textColor;
+          planCtx.font = `${fs}px sans-serif`;
+          planCtx.textBaseline = 'top';
+          planCtx.textAlign = 'left';
+          planCtx.save();
+          planCtx.beginPath();
+          planCtx.rect(x + padding, y + padding, width - padding * 2, height - padding * 2);
+          planCtx.clip();
+          const words = content.split(' ');
+          let line = '';
+          let lineY = y + padding;
+          const lineHeight = fs * 1.3;
+          for (const word of words) {
+            const testLine = line ? line + ' ' + word : word;
+            if (planCtx.measureText(testLine).width > width - padding * 2 && line) {
+              planCtx.fillText(line, x + padding, lineY);
+              line = word;
+              lineY += lineHeight;
+              if (lineY + lineHeight > y + height) break;
+            } else {
+              line = testLine;
+            }
+          }
+          if (line) planCtx.fillText(line, x + padding, lineY);
+          planCtx.restore();
+        });
+
         // Convert composited canvas to JPEG
         const dataUrl = planCanvas.toDataURL('image/jpeg', 0.92);
 
@@ -1738,10 +1969,29 @@ export default function MeasurementCanvas() {
                 setIsDrawing(false);
                 setIsCountingMode(false);
                 setIsExactMode(false);
+                setIsTextMode(false);
                 setSelectedMeasurementId(null);
               }}
             >
               {isEditMode ? "Stop Edit" : "Edit"}
+            </Button>
+            <Button
+              variant={isTextMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                const next = !isTextMode;
+                setIsTextMode(next);
+                if (next) {
+                  setIsDrawing(false);
+                  setIsEditMode(false);
+                  setIsCountingMode(false);
+                  setCurrentPolygon([]);
+                }
+              }}
+              title="Add text box annotation"
+            >
+              <Type className="w-4 h-4 mr-1" />
+              {isTextMode ? "Stop Text" : "Text"}
             </Button>
             <Button
               variant="outline"
@@ -1931,6 +2181,54 @@ export default function MeasurementCanvas() {
             }}
           >
             <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg" />
+            {/* Inline text editor overlay for text annotations */}
+            {editingTextId !== null && (() => {
+              const ann = textAnnotationsList.find(a => a.id === editingTextId);
+              if (!ann) return null;
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: ann.x * zoomLevel,
+                    top: ann.y * zoomLevel,
+                    width: ann.width * zoomLevel,
+                    height: ann.height * zoomLevel,
+                    zIndex: 100,
+                  }}
+                >
+                  <textarea
+                    autoFocus
+                    value={editingTextValue}
+                    onChange={(e) => setEditingTextValue(e.target.value)}
+                    onBlur={() => {
+                      if (editingTextId !== null) {
+                        updateTextAnnotationMutation.mutate({ id: editingTextId, projectId, content: editingTextValue });
+                      }
+                      setEditingTextId(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setEditingTextId(null);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      resize: 'none',
+                      border: '2px solid #3b82f6',
+                      borderRadius: 2,
+                      padding: 8,
+                      fontSize: Math.max(8, ann.fontSize * zoomLevel),
+                      fontFamily: 'sans-serif',
+                      background: ann.bgColor === 'transparent' ? 'rgba(255,255,255,0.95)' : ann.bgColor,
+                      color: ann.textColor,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+              );
+            })()}
             <canvas
               ref={overlayCanvasRef}
               onClick={(e) => {
@@ -1951,6 +2249,33 @@ export default function MeasurementCanvas() {
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
+
+                // Text annotation drag
+                if (draggingTextId !== null && textDragStart) {
+                  const dx = (x - textDragStart.mouseX) / zoomLevel;
+                  const dy = (y - textDragStart.mouseY) / zoomLevel;
+                  // Optimistic local update for smooth dragging
+                  const ann = textAnnotationsList.find(a => a.id === draggingTextId);
+                  if (ann) {
+                    (ann as any).x = textDragStart.origX + dx;
+                    (ann as any).y = textDragStart.origY + dy;
+                    redrawOverlay();
+                  }
+                  return;
+                }
+
+                // Text annotation resize
+                if (resizingTextId !== null && textResizeStart) {
+                  const dx = (x - textResizeStart.mouseX) / zoomLevel;
+                  const dy = (y - textResizeStart.mouseY) / zoomLevel;
+                  const ann = textAnnotationsList.find(a => a.id === resizingTextId);
+                  if (ann) {
+                    (ann as any).width = Math.max(80, textResizeStart.origW + dx);
+                    (ann as any).height = Math.max(40, textResizeStart.origH + dy);
+                    redrawOverlay();
+                  }
+                  return;
+                }
 
                 // Vertex dragging in edit mode
                 if (draggingVertexIndex !== null && selectedMeasurementId && measurements) {
@@ -1984,6 +2309,21 @@ export default function MeasurementCanvas() {
                 setCursorPosition(null);
                 setIsPanning(false);
                 setPanStart(null);
+              }}
+              onDoubleClick={(e) => {
+                const canvas = overlayCanvasRef.current!;
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / zoomLevel;
+                const y = (e.clientY - rect.top) / zoomLevel;
+                const ann = textAnnotationsList.find((a) => {
+                  if (a.pageNumber !== currentPage) return false;
+                  return x >= a.x && x <= a.x + a.width && y >= a.y && y <= a.y + a.height;
+                });
+                if (ann) {
+                  setEditingTextId(ann.id);
+                  setEditingTextValue(ann.content);
+                  setSelectedTextId(ann.id);
+                }
               }}
               onContextMenu={(e) => e.preventDefault()}
               onTouchStart={handleTouchStart}

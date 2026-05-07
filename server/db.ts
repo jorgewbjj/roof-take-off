@@ -1,6 +1,6 @@
 import { eq, desc, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory } from "../drizzle/schema";
+import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -242,4 +242,40 @@ export async function deleteCountingCategory(id: number, userId: number) {
   await db.delete(countingCategories).where(
     and(eq(countingCategories.id, id), eq(countingCategories.userId, userId))
   );
+}
+
+// Text Annotation queries
+export async function getProjectTextAnnotations(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(textAnnotations)
+    .where(eq(textAnnotations.projectId, projectId))
+    .orderBy(textAnnotations.createdAt);
+}
+
+export async function createTextAnnotation(annotation: InsertTextAnnotation) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(textAnnotations).values(annotation);
+  return result[0].insertId;
+}
+
+export async function updateTextAnnotation(
+  id: number,
+  projectId: number,
+  updates: Partial<Pick<InsertTextAnnotation, 'x' | 'y' | 'width' | 'height' | 'content' | 'fontSize' | 'textColor' | 'bgColor'>>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Verify the annotation belongs to the given project (ownership enforced at router level)
+  await db.update(textAnnotations)
+    .set(updates)
+    .where(and(eq(textAnnotations.id, id), eq(textAnnotations.projectId, projectId)));
+}
+
+export async function deleteTextAnnotation(id: number, projectId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(textAnnotations)
+    .where(and(eq(textAnnotations.id, id), eq(textAnnotations.projectId, projectId)));
 }
