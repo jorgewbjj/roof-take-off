@@ -587,7 +587,9 @@ export default function MeasurementCanvas() {
       if (coords.length < 1) return; // Need at least 1 coordinate
 
       // Check measurement type first
-      const isPoint = measurement.type === 'point' || (measurement.count !== null && measurement.count !== undefined);
+      // Wall measurements store height in the count field but are type='line' — exclude them from point detection
+      const isWallMeasurement = WALL_CATEGORIES.includes(measurement.name);
+      const isPoint = !isWallMeasurement && (measurement.type === 'point' || (measurement.count !== null && measurement.count !== undefined));
       
       // Point measurements need only 1 coordinate, others need at least 2
       if (!isPoint && coords.length < 2) return;
@@ -599,7 +601,8 @@ export default function MeasurementCanvas() {
       }));
 
       const isSelected = isEditMode && selectedMeasurementId === measurement.id;
-      const isLine = !isPoint && (measurement.perimeter === null || measurement.perimeter === undefined);
+      // Wall measurements have perimeter set (stores linear footage) but must render as lines, not polygons
+      const isLine = !isPoint && (isWallMeasurement || measurement.perimeter === null || measurement.perimeter === undefined);
 
       if (isPoint) {
         // Draw point marker (small circle with X)

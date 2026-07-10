@@ -431,3 +431,6 @@
 - [x] Canvas: render text boxes on overlay canvas with selection handles
 - [x] PDF export: render text boxes on annotated plan page (page 2) at correct export scale
 - [x] Vitest tests for text annotation CRUD procedures
+
+## Bug Fix - Wall Measurements Rendering
+- [x] Fix: Wall measurements (type=line) showing as count/point X markers instead of polylines on canvas
