@@ -376,7 +376,7 @@
 - [x] BUG: Summary "Total Area" includes wall areas incorrectly (wall area is not roof area)
 - [x] BUG: console.log statements left in production code (getPdfUrl, loadPdf)
 - [x] BUG: Wall height stored as count*100 integer - loses precision for heights like 8.5ft
-- [ ] UX: Scale unit dropdown values ("feet"/"meters") don't match display labels ("ft"/"m")
+- [x] UX: Scale unit dropdown values ("feet"/"meters") don't match display labels ("ft"/"m") — fixed, normalized to ft/m
 - [ ] UX: Name dialog resets category to "Drip Edge" when Escape is pressed to complete drawing
 - [ ] PERF: redrawOverlay called on every mousemove even when not drawing
 
@@ -438,3 +438,8 @@
 ## Bug Fixes - URL Expiry & Scale Unit
 - [x] Fix: projects.list and projects.get return stale/expired pdfUrl — regenerate fresh presigned URL on every request
 - [x] Fix: default scale unit is meters, should be feet (ft) everywhere — new projects, calibration dialog, measurement display
+
+## Bug Fix - Scale Unit Persistence
+- [x] Fix: toolbar scaleUnit change must save to DB immediately (currently only saved on calibration)
+- [x] Fix: migrate all existing projects with scaleUnit='m' to 'ft' in DB
+- [x] Fix: ensure scaleUnit='ft' is the enforced default for all new and existing projects

@@ -2048,7 +2048,10 @@ export default function MeasurementCanvas() {
               className="w-20 h-8"
               step="0.1"
             />
-            <Select value={scaleUnit} onValueChange={setScaleUnit}>
+            <Select value={scaleUnit} onValueChange={(val) => {
+              setScaleUnit(val);
+              updateProjectMutation.mutate({ id: projectId, scaleUnit: val });
+            }}>
               <SelectTrigger className="w-20 h-8">
                 <SelectValue />
               </SelectTrigger>
