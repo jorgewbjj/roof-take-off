@@ -4,7 +4,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { storagePut } from "./storage";
+import { storagePut, storageGet } from "./storage";
 import { nanoid } from "nanoid";
 
 export const appRouter = router({
@@ -22,13 +22,33 @@ export const appRouter = router({
 
   projects: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      return db.getUserProjects(ctx.user.id);
+      const projects = await db.getUserProjects(ctx.user.id);
+      // Generate fresh presigned URLs in parallel (stored URLs expire)
+      const projectsWithFreshUrls = await Promise.all(
+        projects.map(async (project) => {
+          if (!project.pdfKey) return project;
+          try {
+            const { url } = await storageGet(project.pdfKey);
+            return { ...project, pdfUrl: url };
+          } catch {
+            return project; // Fall back to stored URL on error
+          }
+        })
+      );
+      return projectsWithFreshUrls;
     }),
 
     get: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ ctx, input }) => {
-        return db.getProjectById(input.id, ctx.user.id);
+        const project = await db.getProjectById(input.id, ctx.user.id);
+        if (!project || !project.pdfKey) return project;
+        try {
+          const { url } = await storageGet(project.pdfKey);
+          return { ...project, pdfUrl: url };
+        } catch {
+          return project; // Fall back to stored URL on error
+        }
       }),
 
     getPdfUrl: protectedProcedure

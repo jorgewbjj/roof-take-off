@@ -65,7 +65,7 @@ export default function MeasurementCanvas() {
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);
-  const [scaleUnit, setScaleUnit] = useState("feet");
+  const [scaleUnit, setScaleUnit] = useState("ft");
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPolygon, setCurrentPolygon] = useState<Point[]>([]);
   const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
@@ -2053,8 +2053,8 @@ export default function MeasurementCanvas() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="feet">ft</SelectItem>
-                <SelectItem value="meters">m</SelectItem>
+                <SelectItem value="ft">ft</SelectItem>
+                <SelectItem value="m">m</SelectItem>
               </SelectContent>
             </Select>
             <span className="text-sm text-muted-foreground">per inch</span>

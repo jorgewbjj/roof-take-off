@@ -434,3 +434,7 @@
 
 ## Bug Fix - Wall Measurements Rendering
 - [x] Fix: Wall measurements (type=line) showing as count/point X markers instead of polylines on canvas
+
+## Bug Fixes - URL Expiry & Scale Unit
+- [x] Fix: projects.list and projects.get return stale/expired pdfUrl — regenerate fresh presigned URL on every request
+- [x] Fix: default scale unit is meters, should be feet (ft) everywhere — new projects, calibration dialog, measurement display
