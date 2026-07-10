@@ -450,3 +450,6 @@
 
 ## Wall Measurement Bug
 - [x] Fix: Wall measurements saved to DB are not rendered on the canvas after save/reload
+
+## PDF Export - Annotated Plan Per Category
+- [x] Fix: PDF Annotated Plan section must generate one page per measurement category (instead of all on one page) so labels don't overlap

@@ -1560,54 +1560,41 @@ export default function MeasurementCanvas() {
         yPos += 8;
       });
 
-    // ── Page 2: Annotated Plan ──────────────────────────────────────────────
-    // Re-render the PDF page at a fixed export scale and draw all annotations on top.
-    // This ensures the annotated plan is crisp and full-quality regardless of the
-    // user's current zoom level.
-    if (pdfDoc) {
+    // ── Annotated Plan Pages: one page per measurement category ──────────────
+    // Each category gets its own PDF page showing only that category's shapes
+    // on the roof plan, so labels never overlap across categories.
+    if (pdfDoc && measurements && measurements.length > 0) {
       try {
-        // Render the export canvas at baseScale (same as the interactive canvas base).
-        // Stored coordinates are normalized to baseScale pixel space (divided by zoomLevel
-        // when captured, leaving them at baseScale * 1px-per-PDF-unit). Rendering at
-        // baseScale means we can draw annotations with a 1:1 coordinate mapping.
         const EXPORT_SCALE = baseScale; // 2.5 — matches stored coordinate space
 
-        // Render the PDF page to an off-screen canvas
+        // Render the base PDF page once; we'll clone it for each category.
         const page = await pdfDoc.getPage(currentPage);
         const viewport = page.getViewport({ scale: EXPORT_SCALE });
 
-        const planCanvas = document.createElement('canvas');
-        planCanvas.width = viewport.width;
-        planCanvas.height = viewport.height;
-        const planCtx = planCanvas.getContext('2d')!;
-        planCtx.imageSmoothingEnabled = true;
-        planCtx.imageSmoothingQuality = 'high';
-        await page.render({ canvasContext: planCtx, viewport, canvas: planCanvas }).promise;
+        // Helper: render the base plan to a fresh canvas
+        const renderBasePlan = async (): Promise<HTMLCanvasElement> => {
+          const c = document.createElement('canvas');
+          c.width = viewport.width;
+          c.height = viewport.height;
+          const ctx2d = c.getContext('2d')!;
+          ctx2d.imageSmoothingEnabled = true;
+          ctx2d.imageSmoothingQuality = 'high';
+          await page.render({ canvasContext: ctx2d, viewport, canvas: c }).promise;
+          return c;
+        };
 
-        // Draw all saved measurements on top.
-        // Stored coordinates are already in EXPORT_SCALE pixel space — no conversion needed.
-        measurements?.forEach((m) => {
-          if (hiddenCategories.has(m.name) || hiddenMeasurements.has(m.id)) return;
+        // Helper: draw a single measurement onto a canvas context
+        const drawMeasurement = (planCtx: CanvasRenderingContext2D, m: typeof measurements[0]) => {
           const coords = m.coordinates as Point[];
           if (coords.length < 1) return;
-
-          const isPoint = m.type === 'point' || (m.count !== null && m.count !== undefined);
+          const isWallMeasurement = m.type === 'line' && m.perimeter !== null && m.perimeter !== undefined && m.count !== null && m.count !== undefined;
+          const isPoint = m.type === 'point' || (!isWallMeasurement && m.count !== null && m.count !== undefined);
           if (!isPoint && coords.length < 2) return;
-
-          // Coordinate mapping:
-          // When a user clicks at canvas pixel (x, y), the stored coord is x / zoomLevel.
-          // The canvas pixel x = pdf_unit * baseScale * zoomLevel, so:
-          //   stored = pdf_unit * baseScale * zoomLevel / zoomLevel = pdf_unit * baseScale
-          // The export canvas is rendered at EXPORT_SCALE = baseScale, so:
-          //   export_pixel = pdf_unit * EXPORT_SCALE = pdf_unit * baseScale = stored coord
-          // Therefore stored coords map 1:1 to export canvas pixels — NO scaling needed.
           const sc = coords.map(p => ({ x: p.x, y: p.y }));
-
-          // Mirror the exact isLine detection from redrawOverlay
-          const isLine = !isPoint && (m.perimeter === null || m.perimeter === undefined);
+          // isLine: a polyline (linear ft) — has perimeter but NOT the wall-height count trick
+          const isLine = !isPoint && !isWallMeasurement && (m.perimeter !== null && m.perimeter !== undefined);
 
           if (isPoint) {
-            // Scale up marker size for the high-res export canvas (baseScale=2.5 vs screen)
             const markerSize = 30;
             const pt = sc[0];
             planCtx.beginPath();
@@ -1617,7 +1604,6 @@ export default function MeasurementCanvas() {
             planCtx.strokeStyle = m.color;
             planCtx.lineWidth = 4;
             planCtx.stroke();
-            // X mark inside
             planCtx.strokeStyle = '#fff';
             planCtx.lineWidth = 4;
             const xOff = markerSize * 0.55;
@@ -1627,7 +1613,6 @@ export default function MeasurementCanvas() {
             planCtx.moveTo(pt.x + xOff, pt.y - xOff);
             planCtx.lineTo(pt.x - xOff, pt.y + xOff);
             planCtx.stroke();
-            // Label box: category name + count number to the right of the marker
             const lx = pt.x + markerSize + 10;
             const ly = pt.y;
             planCtx.fillStyle = m.color;
@@ -1636,20 +1621,18 @@ export default function MeasurementCanvas() {
             planCtx.font = 'bold 34px sans-serif';
             planCtx.textAlign = 'left';
             planCtx.textBaseline = 'middle';
-            // Truncate long names to fit in box
-            const pointName = m.name.length > 12 ? m.name.slice(0, 12) + '…' : m.name;
+            const pointName = m.name.length > 12 ? m.name.slice(0, 12) + '\u2026' : m.name;
             planCtx.fillText(pointName, lx + 10, ly - 12);
             planCtx.font = '30px sans-serif';
             planCtx.fillText(`#${m.count ?? 1}`, lx + 10, ly + 22);
-          } else if (isLine) {
-            // Mirror redrawOverlay line drawing — scale up line width for export canvas
+          } else if (isWallMeasurement) {
+            // Wall: draw as a thick colored polyline with wall-area label
             planCtx.strokeStyle = m.color;
-            planCtx.lineWidth = 6;
+            planCtx.lineWidth = 8;
             planCtx.beginPath();
             planCtx.moveTo(sc[0].x, sc[0].y);
             for (let i = 1; i < sc.length; i++) planCtx.lineTo(sc[i].x, sc[i].y);
             planCtx.stroke();
-            // Vertex dots — scale up for export canvas
             sc.forEach(pt => {
               planCtx.beginPath();
               planCtx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
@@ -1659,7 +1642,35 @@ export default function MeasurementCanvas() {
               planCtx.lineWidth = 3;
               planCtx.stroke();
             });
-            // Label — name + distance value, centered on polyline midpoint
+            const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
+            const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
+            const wallHeight = (m.count ?? 0) / 1000;
+            planCtx.fillStyle = m.color;
+            planCtx.fillRect(cx - 200, cy - 60, 400, 120);
+            planCtx.fillStyle = '#fff';
+            planCtx.font = 'bold 38px sans-serif';
+            planCtx.textAlign = 'center';
+            planCtx.textBaseline = 'middle';
+            planCtx.fillText(m.name, cx, cy - 22);
+            planCtx.font = '30px sans-serif';
+            planCtx.fillText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy + 10);
+            planCtx.fillText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 46);
+          } else if (isLine) {
+            planCtx.strokeStyle = m.color;
+            planCtx.lineWidth = 6;
+            planCtx.beginPath();
+            planCtx.moveTo(sc[0].x, sc[0].y);
+            for (let i = 1; i < sc.length; i++) planCtx.lineTo(sc[i].x, sc[i].y);
+            planCtx.stroke();
+            sc.forEach(pt => {
+              planCtx.beginPath();
+              planCtx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
+              planCtx.fillStyle = m.color;
+              planCtx.fill();
+              planCtx.strokeStyle = '#fff';
+              planCtx.lineWidth = 3;
+              planCtx.stroke();
+            });
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
             planCtx.fillStyle = '#000';
@@ -1670,19 +1681,18 @@ export default function MeasurementCanvas() {
             planCtx.textBaseline = 'middle';
             planCtx.fillText(m.name, cx, cy - 18);
             planCtx.font = '34px sans-serif';
-            planCtx.fillText(`${m.area} ${scaleUnit}`, cx, cy + 26);
+            planCtx.fillText(`${m.perimeter} ${scaleUnit}`, cx, cy + 26);
           } else {
-            // Mirror redrawOverlay area drawing
+            // Area polygon
             planCtx.fillStyle = m.color + '40';
             planCtx.strokeStyle = m.color;
-            planCtx.lineWidth = 2;
+            planCtx.lineWidth = 4;
             planCtx.beginPath();
             planCtx.moveTo(sc[0].x, sc[0].y);
             sc.forEach(pt => planCtx.lineTo(pt.x, pt.y));
             planCtx.closePath();
             planCtx.fill();
             planCtx.stroke();
-            // Label — scale fonts up for the high-res export canvas
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
             planCtx.fillStyle = '#000';
@@ -1693,90 +1703,105 @@ export default function MeasurementCanvas() {
             planCtx.textBaseline = 'middle';
             planCtx.fillText(m.name, cx, cy - 18);
             planCtx.font = '34px sans-serif';
-            planCtx.fillText(`${m.area} ${scaleUnit}²`, cx, cy + 26);
+            planCtx.fillText(`${m.area} ${scaleUnit}\u00b2`, cx, cy + 26);
           }
-        });
+        };
 
-        // Draw text annotations on the export canvas
-        const pageTextAnnotations = textAnnotationsList.filter(a => a.pageNumber === currentPage);
-        pageTextAnnotations.forEach((ann) => {
-          // Coordinates are in baseScale pixel space — 1:1 with export canvas
-          const { x, y, width, height, content, fontSize, textColor, bgColor } = ann;
-          // Background
-          planCtx.fillStyle = bgColor === 'transparent' ? 'rgba(255,255,255,0.9)' : bgColor;
-          planCtx.fillRect(x, y, width, height);
-          // Border
-          planCtx.strokeStyle = '#374151';
-          planCtx.lineWidth = 2;
-          planCtx.strokeRect(x, y, width, height);
-          // Text
-          const padding = 10;
-          const fs = Math.max(12, fontSize);
-          planCtx.fillStyle = textColor;
-          planCtx.font = `${fs}px sans-serif`;
-          planCtx.textBaseline = 'top';
-          planCtx.textAlign = 'left';
-          planCtx.save();
-          planCtx.beginPath();
-          planCtx.rect(x + padding, y + padding, width - padding * 2, height - padding * 2);
-          planCtx.clip();
-          const words = content.split(' ');
-          let line = '';
-          let lineY = y + padding;
-          const lineHeight = fs * 1.3;
-          for (const word of words) {
-            const testLine = line ? line + ' ' + word : word;
-            if (planCtx.measureText(testLine).width > width - padding * 2 && line) {
-              planCtx.fillText(line, x + padding, lineY);
-              line = word;
-              lineY += lineHeight;
-              if (lineY + lineHeight > y + height) break;
-            } else {
-              line = testLine;
+        // Helper: draw text annotations onto a canvas context
+        const drawTextAnnotations = (planCtx: CanvasRenderingContext2D) => {
+          const pageTextAnnotations = textAnnotationsList.filter(a => a.pageNumber === currentPage);
+          pageTextAnnotations.forEach((ann) => {
+            const { x, y, width, height, content, fontSize, textColor, bgColor } = ann;
+            planCtx.fillStyle = bgColor === 'transparent' ? 'rgba(255,255,255,0.9)' : bgColor;
+            planCtx.fillRect(x, y, width, height);
+            planCtx.strokeStyle = '#374151';
+            planCtx.lineWidth = 2;
+            planCtx.strokeRect(x, y, width, height);
+            const padding = 10;
+            const fs = Math.max(12, fontSize);
+            planCtx.fillStyle = textColor;
+            planCtx.font = `${fs}px sans-serif`;
+            planCtx.textBaseline = 'top';
+            planCtx.textAlign = 'left';
+            planCtx.save();
+            planCtx.beginPath();
+            planCtx.rect(x + padding, y + padding, width - padding * 2, height - padding * 2);
+            planCtx.clip();
+            const words = content.split(' ');
+            let line = '';
+            let lineY = y + padding;
+            const lineHeight = fs * 1.3;
+            for (const word of words) {
+              const testLine = line ? line + ' ' + word : word;
+              if (planCtx.measureText(testLine).width > width - padding * 2 && line) {
+                planCtx.fillText(line, x + padding, lineY);
+                line = word;
+                lineY += lineHeight;
+                if (lineY + lineHeight > y + height) break;
+              } else {
+                line = testLine;
+              }
             }
+            if (line) planCtx.fillText(line, x + padding, lineY);
+            planCtx.restore();
+          });
+        };
+
+        // Helper: add a composited canvas as a new PDF page
+        const addAnnotatedPage = (planCanvas: HTMLCanvasElement, categoryLabel: string) => {
+          const dataUrl = planCanvas.toDataURL('image/jpeg', 0.92);
+          const isLandscape = planCanvas.width > planCanvas.height;
+          doc.addPage(isLandscape ? 'l' : 'p');
+          const pageW = doc.internal.pageSize.getWidth();
+          const pageH = doc.internal.pageSize.getHeight();
+          const innerMargin = 10;
+          const titleH = 14;
+          const availW = pageW - innerMargin * 2;
+          const availH = pageH - innerMargin * 2 - titleH;
+          const imgAspect = planCanvas.width / planCanvas.height;
+          const boxAspect = availW / availH;
+          let imgW: number, imgH: number;
+          if (imgAspect > boxAspect) {
+            imgW = availW;
+            imgH = availW / imgAspect;
+          } else {
+            imgH = availH;
+            imgW = availH * imgAspect;
           }
-          if (line) planCtx.fillText(line, x + padding, lineY);
-          planCtx.restore();
-        });
+          const imgX = innerMargin + (availW - imgW) / 2;
+          const imgY = innerMargin + titleH;
+          doc.setFontSize(11);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(0, 0, 0);
+          doc.text(`Annotated Plan \u2014 ${categoryLabel}`, innerMargin, innerMargin + 9);
+          doc.addImage(dataUrl, 'JPEG', imgX, imgY, imgW, imgH);
+        };
 
-        // Convert composited canvas to JPEG
-        const dataUrl = planCanvas.toDataURL('image/jpeg', 0.92);
+        // Collect unique category names from visible measurements
+        const visibleMeasurements = measurements.filter(
+          m => !hiddenCategories.has(m.name) && !hiddenMeasurements.has(m.id)
+        );
+        const categoryNames = Array.from(new Set(visibleMeasurements.map(m => m.name)));
 
-        // Add a new page matching the plan orientation
-        const isLandscape = planCanvas.width > planCanvas.height;
-        doc.addPage(isLandscape ? 'l' : 'p');
+        // Generate one annotated page per category
+        for (const categoryName of categoryNames) {
+          const categoryMeasurements = visibleMeasurements.filter(m => m.name === categoryName);
+          if (categoryMeasurements.length === 0) continue;
 
-        const p2Width = doc.internal.pageSize.getWidth();
-        const p2Height = doc.internal.pageSize.getHeight();
-        const innerMargin = 10;
-        const availW = p2Width - innerMargin * 2;
-        const availH = p2Height - innerMargin * 2 - 12; // 12pt for title
+          // Render a fresh base plan for this category
+          const planCanvas = await renderBasePlan();
+          const planCtx = planCanvas.getContext('2d')!;
 
-        // Fit image within available area preserving aspect ratio
-        const imgAspect = planCanvas.width / planCanvas.height;
-        const boxAspect = availW / availH;
-        let imgW: number, imgH: number;
-        if (imgAspect > boxAspect) {
-          imgW = availW;
-          imgH = availW / imgAspect;
-        } else {
-          imgH = availH;
-          imgW = availH * imgAspect;
+          // Draw only this category's measurements
+          categoryMeasurements.forEach(m => drawMeasurement(planCtx, m));
+
+          // Draw text annotations (they are global context, shown on every page)
+          drawTextAnnotations(planCtx);
+
+          addAnnotatedPage(planCanvas, categoryName);
         }
-
-        // Center horizontally
-        const imgX = innerMargin + (availW - imgW) / 2;
-        const imgY = innerMargin + 12;
-
-        // Page title
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(0, 0, 0);
-        doc.text('Annotated Plan', innerMargin, innerMargin + 8);
-
-        doc.addImage(dataUrl, 'JPEG', imgX, imgY, imgW, imgH);
       } catch (err) {
-        console.warn('Could not add annotated plan page to PDF:', err);
+        console.warn('Could not add annotated plan pages to PDF:', err);
       }
     }
 
