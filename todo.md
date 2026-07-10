@@ -447,3 +447,6 @@
 ## OAuth Error Handling
 - [x] Fix: OAuth callback now redirects to /?auth_error=... instead of showing raw JSON {"error":"OAuth callback failed"}
 - [x] Fix: Home.tsx shows a friendly "Sign-in failed" banner with "Try Again" button when auth_error param is present
+
+## Wall Measurement Bug
+- [x] Fix: Wall measurements saved to DB are not rendered on the canvas after save/reload

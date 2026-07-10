@@ -189,12 +189,50 @@ describe("measurements", () => {
       area: "20.0",
       perimeter: undefined,
     });
-
     // Delete it
     await caller.measurements.delete({ id: measurement.id });
-
     // Verify it's gone
     const list = await caller.measurements.list({ projectId: testProjectId });
     expect(list).toHaveLength(0);
+  });
+
+  it("saves wall measurements with correct type, perimeter, area, and count fields", async () => {
+    // Wall measurements are saved with:
+    //   type = 'line'
+    //   area = linearFt * height  (wall area in ft²)
+    //   perimeter = linearFt       (linear footage of the wall run)
+    //   count = Math.round(height * 1000)  (height encoded as integer)
+    // This regression test ensures the DB stores all fields and returns them
+    // correctly so the canvas renderer can classify the measurement as a line.
+    const linearFt = 21.17;
+    const height = 1.0; // 1 ft height
+    const wallArea = linearFt * height; // 21.17 ft²
+
+    const created = await caller.measurements.create({
+      projectId: testProjectId,
+      name: "Wall",
+      type: "line",
+      color: "#ef4444",
+      area: wallArea.toFixed(2),
+      perimeter: linearFt.toFixed(2),
+      count: Math.round(height * 1000),
+      coordinates: [{ x: 0, y: 0 }, { x: 96, y: 0 }],
+    });
+
+    expect(created.id).toBeTypeOf("number");
+
+    const list = await caller.measurements.list({ projectId: testProjectId });
+    const wall = list.find((m) => m.name === "Wall");
+    expect(wall).toBeDefined();
+    // type must be 'line' so the canvas renderer draws it as a polyline
+    expect(wall!.type).toBe("line");
+    // perimeter stores linear footage (not null)
+    expect(parseFloat(wall!.perimeter!)).toBeCloseTo(linearFt, 1);
+    // area stores wall area
+    expect(parseFloat(wall!.area!)).toBeCloseTo(wallArea, 1);
+    // count stores height * 1000
+    expect(wall!.count).toBe(Math.round(height * 1000));
+    // coordinates must have 2+ points so the renderer doesn't skip it
+    expect((wall!.coordinates as Array<unknown>).length).toBeGreaterThanOrEqual(2);
   });
 });

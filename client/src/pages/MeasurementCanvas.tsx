@@ -163,7 +163,9 @@ export default function MeasurementCanvas() {
       setCurrentPolygon([]);
       setMeasurementName("");
       setIsShapeClosed(false);
-      redrawOverlay();
+      setIsDrawing(false); // Exit drawing mode so the saved measurement is visible immediately
+      // redrawOverlay is intentionally NOT called here — the useEffect watching `measurements`
+      // fires automatically once the invalidate refetch completes with the fresh data.
     },
   });
 
@@ -1447,8 +1449,9 @@ export default function MeasurementCanvas() {
     setPendingWallMeasurement(null);
     setWallHeight("");
     setIsShapeClosed(false);
+    setCurrentPolygon([]);  // Clear the drawn line immediately so it doesn't linger on canvas
+    // isDrawing will be reset by createMeasurementMutation.onSuccess
   };
-
   // Export measurements to PDF
   const exportMeasurementsPDF = async () => {
     if (!measurements || measurements.length === 0) {
