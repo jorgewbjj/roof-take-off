@@ -15,7 +15,9 @@ export function registerOAuthRoutes(app: Express) {
     const state = getQueryParam(req, "state");
 
     if (!code || !state) {
-      res.status(400).json({ error: "code and state are required" });
+      // User navigated directly to the callback URL without a valid OAuth flow.
+      // Redirect them to the home page so they can sign in normally.
+      res.redirect(302, "/?auth_error=missing_params");
       return;
     }
 
@@ -24,7 +26,8 @@ export function registerOAuthRoutes(app: Express) {
       const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
 
       if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
+        console.error("[OAuth] openId missing from user info response");
+        res.redirect(302, "/?auth_error=missing_openid");
         return;
       }
 
@@ -46,8 +49,12 @@ export function registerOAuthRoutes(app: Express) {
 
       res.redirect(302, "/");
     } catch (error) {
+      // Log the full error server-side for debugging, but redirect the user
+      // to the home page with a friendly error indicator instead of showing
+      // a raw JSON error message. The most common cause is an expired OAuth
+      // code (codes are single-use and expire in ~60 seconds).
       console.error("[OAuth] Callback failed", error);
-      res.status(500).json({ error: "OAuth callback failed" });
+      res.redirect(302, "/?auth_error=callback_failed");
     }
   });
 }

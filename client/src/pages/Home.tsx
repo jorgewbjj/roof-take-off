@@ -1,13 +1,19 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { getLoginUrl } from "@/const";
-import { Ruler, Upload, Palette, Save, ArrowRight } from "lucide-react";
+import { Ruler, Upload, Palette, Save, ArrowRight, AlertCircle } from "lucide-react";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 export default function Home() {
   const { isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Detect auth_error query param set by the OAuth callback on failure
+  const authError = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("auth_error");
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated && !loading) {
@@ -41,6 +47,21 @@ export default function Home() {
           </Button>
         </div>
       </header>
+
+      {/* Auth Error Banner */}
+      {authError && (
+        <div className="bg-destructive/10 border-b border-destructive/20">
+          <div className="container py-3 flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
+            <p className="text-sm text-destructive">
+              Sign-in failed — the login session may have expired. Please try signing in again.
+            </p>
+            <Button size="sm" variant="outline" asChild className="ml-auto flex-shrink-0">
+              <a href={getLoginUrl()}>Try Again</a>
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Section */}
       <main className="container py-20">

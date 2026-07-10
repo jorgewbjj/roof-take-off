@@ -443,3 +443,7 @@
 - [x] Fix: toolbar scaleUnit change must save to DB immediately (currently only saved on calibration)
 - [x] Fix: migrate all existing projects with scaleUnit='m' to 'ft' in DB
 - [x] Fix: ensure scaleUnit='ft' is the enforced default for all new and existing projects
+
+## OAuth Error Handling
+- [x] Fix: OAuth callback now redirects to /?auth_error=... instead of showing raw JSON {"error":"OAuth callback failed"}
+- [x] Fix: Home.tsx shows a friendly "Sign-in failed" banner with "Try Again" button when auth_error param is present
