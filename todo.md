@@ -453,3 +453,6 @@
 
 ## PDF Export - Annotated Plan Per Category
 - [x] Fix: PDF Annotated Plan section must generate one page per measurement category (instead of all on one page) so labels don't overlap
+
+## Label Styling Fix
+- [x] Fix: Remove solid black background boxes from measurement labels on canvas and in PDF; use smaller text with outline/shadow for readability

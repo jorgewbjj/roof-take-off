@@ -652,15 +652,18 @@ export default function MeasurementCanvas() {
           ctx.stroke();
         });
 
-        // Draw label with total distance at center of polyline
+        // Draw label with total distance at center of polyline — no background box
         const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
         const centerY = scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length;
-        ctx.fillStyle = "#000";
-        ctx.fillRect(centerX - 50, centerY - 20, 100, 30);
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 11px sans-serif";
+        ctx.font = "bold 10px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        // Outline stroke for readability against any background
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.lineWidth = 3;
+        ctx.lineJoin = "round";
+        ctx.strokeText(`${measurement.area} ${scaleUnit}`, centerX, centerY);
+        ctx.fillStyle = measurement.color;
         ctx.fillText(`${measurement.area} ${scaleUnit}`, centerX, centerY);
       } else {
         // Draw area measurement (polygon)
@@ -688,17 +691,22 @@ export default function MeasurementCanvas() {
           });
         }
 
-        // Draw label with area
+        // Draw label with area — no background box, outlined text for readability
         const centerX = scaledCoords.reduce((sum, p) => sum + p.x, 0) / scaledCoords.length;
         const centerY = scaledCoords.reduce((sum, p) => sum + p.y, 0) / scaledCoords.length;
-        ctx.fillStyle = "#000";
-        ctx.fillRect(centerX - 60, centerY - 25, 120, 40);
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 12px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText(measurement.name, centerX, centerY - 8);
-        ctx.font = "11px sans-serif";
-        ctx.fillText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 8);
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.lineWidth = 3;
+        ctx.font = "bold 10px sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.strokeText(measurement.name, centerX, centerY - 7);
+        ctx.fillStyle = measurement.color;
+        ctx.fillText(measurement.name, centerX, centerY - 7);
+        ctx.font = "9px sans-serif";
+        ctx.strokeText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 7);
+        ctx.fillStyle = "#fff";
+        ctx.fillText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 7);
       }
     });
 
@@ -729,16 +737,16 @@ export default function MeasurementCanvas() {
         const distance = calculateDistance(currentPolygon[i], currentPolygon[i + 1]);
         const midX = (p1.x + p2.x) / 2;
         const midY = (p1.y + p2.y) / 2;
-        
-        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
-        ctx.fillRect(midX - 30, midY - 12, 60, 20);
-        ctx.fillStyle = "#fff";
-        ctx.font = "11px sans-serif";
+        ctx.font = "10px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.lineWidth = 3;
+        ctx.strokeText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
+        ctx.fillStyle = "#fff";
         ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
       }
-
       // Draw preview line from last point to cursor
       if (cursorPosition && scaledPolygon.length > 0) {
         const lastPoint = scaledPolygon[scaledPolygon.length - 1];
@@ -757,12 +765,14 @@ export default function MeasurementCanvas() {
         const distance = calculateDistance(lastPointNormalized, cursorNormalized);
         const midX = (lastPoint.x + cursorPosition.x) / 2;
         const midY = (lastPoint.y + cursorPosition.y) / 2;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-        ctx.fillRect(midX - 30, midY - 12, 60, 20);
-        ctx.fillStyle = "#fff";
-        ctx.font = "11px sans-serif";
+        ctx.font = "10px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.lineWidth = 3;
+        ctx.strokeText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
+        ctx.fillStyle = "#fff";
         ctx.fillText(`${distance.toFixed(1)} ${scaleUnit}`, midX, midY);
       }
 
@@ -1615,16 +1625,20 @@ export default function MeasurementCanvas() {
             planCtx.stroke();
             const lx = pt.x + markerSize + 10;
             const ly = pt.y;
-            planCtx.fillStyle = m.color;
-            planCtx.fillRect(lx, ly - 40, 280, 80);
-            planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 34px sans-serif';
             planCtx.textAlign = 'left';
             planCtx.textBaseline = 'middle';
-            const pointName = m.name.length > 12 ? m.name.slice(0, 12) + '\u2026' : m.name;
-            planCtx.fillText(pointName, lx + 10, ly - 12);
-            planCtx.font = '30px sans-serif';
-            planCtx.fillText(`#${m.count ?? 1}`, lx + 10, ly + 22);
+            planCtx.lineJoin = 'round';
+            const pointName = m.name.length > 14 ? m.name.slice(0, 14) + '\u2026' : m.name;
+            planCtx.font = 'bold 22px sans-serif';
+            planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
+            planCtx.lineWidth = 5;
+            planCtx.strokeText(pointName, lx, ly - 8);
+            planCtx.fillStyle = m.color;
+            planCtx.fillText(pointName, lx, ly - 8);
+            planCtx.font = '20px sans-serif';
+            planCtx.strokeText(`#${m.count ?? 1}`, lx, ly + 18);
+            planCtx.fillStyle = '#fff';
+            planCtx.fillText(`#${m.count ?? 1}`, lx, ly + 18);
           } else if (isWallMeasurement) {
             // Wall: draw as a thick colored polyline with wall-area label
             planCtx.strokeStyle = m.color;
@@ -1645,16 +1659,21 @@ export default function MeasurementCanvas() {
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
             const wallHeight = (m.count ?? 0) / 1000;
-            planCtx.fillStyle = m.color;
-            planCtx.fillRect(cx - 200, cy - 60, 400, 120);
-            planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 38px sans-serif';
             planCtx.textAlign = 'center';
             planCtx.textBaseline = 'middle';
-            planCtx.fillText(m.name, cx, cy - 22);
-            planCtx.font = '30px sans-serif';
-            planCtx.fillText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy + 10);
-            planCtx.fillText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 46);
+            planCtx.lineJoin = 'round';
+            planCtx.lineWidth = 5;
+            planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
+            planCtx.font = 'bold 22px sans-serif';
+            planCtx.strokeText(m.name, cx, cy - 20);
+            planCtx.fillStyle = m.color;
+            planCtx.fillText(m.name, cx, cy - 20);
+            planCtx.font = '18px sans-serif';
+            planCtx.strokeText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy + 2);
+            planCtx.fillStyle = '#fff';
+            planCtx.fillText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy + 2);
+            planCtx.strokeText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 24);
+            planCtx.fillText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 24);
           } else if (isLine) {
             planCtx.strokeStyle = m.color;
             planCtx.lineWidth = 6;
@@ -1673,15 +1692,19 @@ export default function MeasurementCanvas() {
             });
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
-            planCtx.fillStyle = '#000';
-            planCtx.fillRect(cx - 180, cy - 50, 360, 100);
-            planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 38px sans-serif';
             planCtx.textAlign = 'center';
             planCtx.textBaseline = 'middle';
-            planCtx.fillText(m.name, cx, cy - 18);
-            planCtx.font = '34px sans-serif';
-            planCtx.fillText(`${m.perimeter} ${scaleUnit}`, cx, cy + 26);
+            planCtx.lineJoin = 'round';
+            planCtx.lineWidth = 5;
+            planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
+            planCtx.font = 'bold 22px sans-serif';
+            planCtx.strokeText(m.name, cx, cy - 12);
+            planCtx.fillStyle = m.color;
+            planCtx.fillText(m.name, cx, cy - 12);
+            planCtx.font = '20px sans-serif';
+            planCtx.strokeText(`${m.perimeter} ${scaleUnit}`, cx, cy + 12);
+            planCtx.fillStyle = '#fff';
+            planCtx.fillText(`${m.perimeter} ${scaleUnit}`, cx, cy + 12);
           } else {
             // Area polygon
             planCtx.fillStyle = m.color + '40';
@@ -1695,18 +1718,21 @@ export default function MeasurementCanvas() {
             planCtx.stroke();
             const cx = sc.reduce((s, p) => s + p.x, 0) / sc.length;
             const cy = sc.reduce((s, p) => s + p.y, 0) / sc.length;
-            planCtx.fillStyle = '#000';
-            planCtx.fillRect(cx - 180, cy - 50, 360, 100);
-            planCtx.fillStyle = '#fff';
-            planCtx.font = 'bold 38px sans-serif';
             planCtx.textAlign = 'center';
             planCtx.textBaseline = 'middle';
-            planCtx.fillText(m.name, cx, cy - 18);
-            planCtx.font = '34px sans-serif';
-            planCtx.fillText(`${m.area} ${scaleUnit}\u00b2`, cx, cy + 26);
+            planCtx.lineJoin = 'round';
+            planCtx.lineWidth = 5;
+            planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
+            planCtx.font = 'bold 22px sans-serif';
+            planCtx.strokeText(m.name, cx, cy - 12);
+            planCtx.fillStyle = m.color;
+            planCtx.fillText(m.name, cx, cy - 12);
+            planCtx.font = '20px sans-serif';
+            planCtx.strokeText(`${m.area} ${scaleUnit}\u00b2`, cx, cy + 12);
+            planCtx.fillStyle = '#fff';
+            planCtx.fillText(`${m.area} ${scaleUnit}\u00b2`, cx, cy + 12);
           }
         };
-
         // Helper: draw text annotations onto a canvas context
         const drawTextAnnotations = (planCtx: CanvasRenderingContext2D) => {
           const pageTextAnnotations = textAnnotationsList.filter(a => a.pageNumber === currentPage);
