@@ -1628,17 +1628,12 @@ export default function MeasurementCanvas() {
             planCtx.textAlign = 'left';
             planCtx.textBaseline = 'middle';
             planCtx.lineJoin = 'round';
-            const pointName = m.name.length > 14 ? m.name.slice(0, 14) + '\u2026' : m.name;
             planCtx.font = 'bold 22px sans-serif';
             planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
             planCtx.lineWidth = 5;
-            planCtx.strokeText(pointName, lx, ly - 8);
-            planCtx.fillStyle = m.color;
-            planCtx.fillText(pointName, lx, ly - 8);
-            planCtx.font = '20px sans-serif';
-            planCtx.strokeText(`#${m.count ?? 1}`, lx, ly + 18);
+            planCtx.strokeText(`#${m.count ?? 1}`, lx, ly);
             planCtx.fillStyle = '#fff';
-            planCtx.fillText(`#${m.count ?? 1}`, lx, ly + 18);
+            planCtx.fillText(`#${m.count ?? 1}`, lx, ly);
           } else if (isWallMeasurement) {
             // Wall: draw as a thick colored polyline with wall-area label
             planCtx.strokeStyle = m.color;
@@ -1664,16 +1659,13 @@ export default function MeasurementCanvas() {
             planCtx.lineJoin = 'round';
             planCtx.lineWidth = 5;
             planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
-            planCtx.font = 'bold 22px sans-serif';
-            planCtx.strokeText(m.name, cx, cy - 20);
-            planCtx.fillStyle = m.color;
-            planCtx.fillText(m.name, cx, cy - 20);
             planCtx.font = '18px sans-serif';
-            planCtx.strokeText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy + 2);
+            planCtx.strokeText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy - 10);
             planCtx.fillStyle = '#fff';
-            planCtx.fillText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy + 2);
-            planCtx.strokeText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 24);
-            planCtx.fillText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 24);
+            planCtx.fillText(`${m.perimeter} ${scaleUnit} \u00d7 ${wallHeight.toFixed(2)} ${scaleUnit} h`, cx, cy - 10);
+            planCtx.strokeText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 14);
+            planCtx.fillStyle = m.color;
+            planCtx.fillText(`= ${m.area} ${scaleUnit}\u00b2`, cx, cy + 14);
           } else if (isLine) {
             planCtx.strokeStyle = m.color;
             planCtx.lineWidth = 6;
@@ -1697,14 +1689,10 @@ export default function MeasurementCanvas() {
             planCtx.lineJoin = 'round';
             planCtx.lineWidth = 5;
             planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
-            planCtx.font = 'bold 22px sans-serif';
-            planCtx.strokeText(m.name, cx, cy - 12);
-            planCtx.fillStyle = m.color;
-            planCtx.fillText(m.name, cx, cy - 12);
-            planCtx.font = '20px sans-serif';
-            planCtx.strokeText(`${m.perimeter} ${scaleUnit}`, cx, cy + 12);
+            planCtx.font = 'bold 20px sans-serif';
+            planCtx.strokeText(`${m.perimeter} ${scaleUnit}`, cx, cy);
             planCtx.fillStyle = '#fff';
-            planCtx.fillText(`${m.perimeter} ${scaleUnit}`, cx, cy + 12);
+            planCtx.fillText(`${m.perimeter} ${scaleUnit}`, cx, cy);
           } else {
             // Area polygon
             planCtx.fillStyle = m.color + '40';
@@ -1723,14 +1711,10 @@ export default function MeasurementCanvas() {
             planCtx.lineJoin = 'round';
             planCtx.lineWidth = 5;
             planCtx.strokeStyle = 'rgba(0,0,0,0.9)';
-            planCtx.font = 'bold 22px sans-serif';
-            planCtx.strokeText(m.name, cx, cy - 12);
-            planCtx.fillStyle = m.color;
-            planCtx.fillText(m.name, cx, cy - 12);
-            planCtx.font = '20px sans-serif';
-            planCtx.strokeText(`${m.area} ${scaleUnit}\u00b2`, cx, cy + 12);
+            planCtx.font = 'bold 20px sans-serif';
+            planCtx.strokeText(`${m.area} ${scaleUnit}\u00b2`, cx, cy);
             planCtx.fillStyle = '#fff';
-            planCtx.fillText(`${m.area} ${scaleUnit}\u00b2`, cx, cy + 12);
+            planCtx.fillText(`${m.area} ${scaleUnit}\u00b2`, cx, cy);
           }
         };
         // Helper: draw text annotations onto a canvas context
@@ -1910,7 +1894,7 @@ export default function MeasurementCanvas() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-card shadow-sm">
+      <header className="sticky top-0 z-50 border-b border-border bg-card shadow-sm pt-safe">
         {/* Top Row - Project Name and Export */}
         <div className="px-3 md:px-6 py-3 border-b border-border flex items-center justify-between gap-2">
           <div className="flex items-center gap-4">
@@ -1988,7 +1972,7 @@ export default function MeasurementCanvas() {
         <div className="px-3 md:px-6 py-2 flex items-center gap-3 md:gap-6 overflow-x-auto scrollbar-none">
           {/* Drawing Tools */}
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Tools:</span>
+            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Tools:</span>
             <Button
               variant={isDrawing ? "default" : "outline"}
               size="sm"
@@ -2063,7 +2047,7 @@ export default function MeasurementCanvas() {
 
           {/* Zoom Controls */}
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Zoom:</span>
+            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Zoom:</span>
             <Button
               variant="outline"
               size="sm"
@@ -2094,7 +2078,7 @@ export default function MeasurementCanvas() {
 
           {/* Scale Settings */}
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Scale:</span>
+            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Scale:</span>
             <Input
               type="number"
               value={scale}
@@ -2114,7 +2098,7 @@ export default function MeasurementCanvas() {
                 <SelectItem value="m">m</SelectItem>
               </SelectContent>
             </Select>
-            <span className="text-sm text-muted-foreground">per inch</span>
+            <span className="hidden sm:inline text-sm text-muted-foreground">per inch</span>
           </div>
 
           <Separator orientation="vertical" className="h-6" />
@@ -2122,7 +2106,7 @@ export default function MeasurementCanvas() {
           {/* Category Selector */}
           {isDrawing && (
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">Category:</span>
+              <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Category:</span>
               <Select
                 value={isCustomCategory ? "Other" : selectedCategory}
                 onValueChange={(value) => {
@@ -2175,7 +2159,7 @@ export default function MeasurementCanvas() {
           {/* Color Picker */}
           {isDrawing && (
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-muted-foreground">Color:</span>
+              <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Color:</span>
               <div className="flex gap-1">
                 {PRESET_COLORS.slice(0, 5).map((color) => (
                   <button
@@ -2196,7 +2180,7 @@ export default function MeasurementCanvas() {
             <>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-muted-foreground">Exact:</span>
+                <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Exact:</span>
                 <Button
                   variant={isExactMode ? "default" : "outline"}
                   size="sm"
@@ -2223,7 +2207,7 @@ export default function MeasurementCanvas() {
       <div className="flex-1 flex overflow-hidden">
         {/* Canvas Area */}
         <div 
-          className="flex-1 overflow-hidden p-2 md:p-6" 
+          className="flex-1 overflow-hidden p-2 md:p-6 pb-safe" 
           ref={containerRef}
           onWheel={(e) => {
             // Prevent page scrolling when mouse is over canvas area

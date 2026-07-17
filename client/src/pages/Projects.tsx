@@ -115,20 +115,20 @@ export default function Projects() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
-        <div className="container py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold text-foreground">My Projects</h1>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground">{user.name || user.email}</span>
+        <div className="container py-3 flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">My Projects</h1>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground hidden sm:inline truncate max-w-[140px]">{user.name || user.email}</span>
             <Button variant="outline" size="sm" onClick={() => logout()} className="gap-2">
               <LogOut className="w-4 h-4" />
-              Sign Out
+              <span className="hidden sm:inline">Sign Out</span>
             </Button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="container py-8">
+      <main className="container py-5 md:py-8 pb-safe">
         <div className="flex items-center justify-between mb-6">
           <p className="text-muted-foreground">
             {projects?.length === 0 ? "No projects yet" : `${projects?.length} project${projects?.length === 1 ? "" : "s"}`}
@@ -201,7 +201,7 @@ export default function Projects() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {projects?.map((project) => (
               <Card key={project.id} className="hover:shadow-lg transition-shadow cursor-pointer group">
                 <CardHeader>
@@ -216,7 +216,8 @@ export default function Projects() {
                     </div>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
+                      className="h-9 w-9 flex-shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         if (confirm("Are you sure you want to delete this project?")) {

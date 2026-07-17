@@ -64,14 +64,14 @@ export default function Home() {
       )}
 
       {/* Hero Section */}
-      <main className="container py-20">
+      <main className="container py-10 md:py-20">
         <div className="max-w-4xl mx-auto text-center space-y-8">
-          <h1 className="text-5xl md:text-6xl font-bold text-foreground tracking-tight">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold text-foreground tracking-tight">
             Measure Roof Plans with
             <span className="block text-primary mt-2">Precision & Elegance</span>
           </h1>
           
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Upload your PDF roof plans, calibrate the scale, and measure areas with interactive drawing tools. 
             Save your projects in the cloud and access them anytime, anywhere.
           </p>
@@ -86,7 +86,7 @@ export default function Home() {
         </div>
 
         {/* Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mt-20 max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-10 md:mt-20 max-w-6xl mx-auto">
           <FeatureCard
             icon={<Upload className="w-8 h-8" />}
             title="PDF Upload"

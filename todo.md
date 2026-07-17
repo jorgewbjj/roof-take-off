@@ -456,3 +456,9 @@
 
 ## Label Styling Fix
 - [x] Fix: Remove solid black background boxes from measurement labels on canvas and in PDF; use smaller text with outline/shadow for readability
+
+## PDF Annotated Plan - Label Simplification
+- [x] Fix: Remove per-measurement name label from PDF annotated pages; page title already identifies the category; keep only the measurement value (ft, ft², count)
+
+## Mobile Optimization
+- [x] Optimize: Full mobile layout audit and fix — toolbar scrollability, sidebar as bottom sheet, canvas touch interactions, button tap targets (min 44px), responsive breakpoints for projects list and measurement canvas
