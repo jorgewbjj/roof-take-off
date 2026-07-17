@@ -152,7 +152,7 @@ export default function Projects() {
       <main className="container py-5 md:py-8 pb-safe">
         <div className="flex items-center justify-between mb-6">
           <p className="text-muted-foreground">
-            {projects?.length === 0 ? "No projects yet" : `${projects?.length} project${projects?.length === 1 ? "" : "s"}`}
+            {isLoading ? null : projects?.length === 0 ? "No projects yet" : `${projects?.length} project${projects?.length === 1 ? "" : "s"}`}
           </p>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>

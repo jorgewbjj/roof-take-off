@@ -358,12 +358,8 @@ export default function MeasurementCanvas() {
           return;
         }
         
-        // Complete drawing if 2+ points
+        // Complete drawing if 2+ points — open name dialog WITHOUT resetting the category
         if (isDrawing && currentPolygon.length >= 2) {
-          // Reset category selection to default
-          setSelectedCategory("Drip Edge");
-          setMeasurementName("Drip Edge");
-          setIsCustomCategory(false);
           setIsNameDialogOpen(true);
         }
       }

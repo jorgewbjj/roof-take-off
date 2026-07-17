@@ -49,7 +49,7 @@
 - [x] Zoom in/out controls for better precision
 - [x] Mouse wheel zoom support
 - [x] Zoom level indicator
-- [ ] Pan functionality when zoomed in
+- [x] Pan functionality when zoomed in
 
 ## Bug Fixes - Zoom Alignment
 - [x] Fix measurement overlay to scale with zoom level
@@ -377,8 +377,8 @@
 - [x] BUG: console.log statements left in production code (getPdfUrl, loadPdf)
 - [x] BUG: Wall height stored as count*100 integer - loses precision for heights like 8.5ft
 - [x] UX: Scale unit dropdown values ("feet"/"meters") don't match display labels ("ft"/"m") — fixed, normalized to ft/m
-- [ ] UX: Name dialog resets category to "Drip Edge" when Escape is pressed to complete drawing
-- [ ] PERF: redrawOverlay called on every mousemove even when not drawing
+- [x] UX: Name dialog resets category to "Drip Edge" when Escape is pressed to complete drawing
+- [x] PERF: redrawOverlay called on every mousemove even when not drawing
 
 ## Mobile / iPhone Support
 - [x] Add touch event handlers for drawing (touchstart, touchmove, touchend)
