@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2, Type, X } from "lucide-react";
 import CategoryManager from "@/components/CategoryManager";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
@@ -140,6 +140,16 @@ export default function MeasurementCanvas() {
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
   const { data: measurements, isLoading: measurementsLoading } = trpc.measurements.list.useQuery({ projectId });
+
+  // Memoize category grouping — recomputed only when measurements change, not on every render
+  const measurementsByCategory = useMemo(() => {
+    if (!measurements) return {};
+    return measurements.reduce((acc, m) => {
+      if (!acc[m.name]) acc[m.name] = [];
+      acc[m.name].push(m);
+      return acc;
+    }, {} as Record<string, typeof measurements>);
+  }, [measurements]);
   const { data: textAnnotationsList = [] } = trpc.textAnnotations.list.useQuery({ projectId });
   const createTextAnnotationMutation = trpc.textAnnotations.create.useMutation({
     onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
@@ -181,17 +191,34 @@ export default function MeasurementCanvas() {
   });
 
   const deleteMeasurementMutation = trpc.measurements.delete.useMutation({
+    // Optimistic update: remove from cache immediately for instant feedback
+    onMutate: async (variables) => {
+      await utils.measurements.list.cancel({ projectId });
+      const previous = utils.measurements.list.getData({ projectId });
+      utils.measurements.list.setData(
+        { projectId },
+        (old) => old?.filter((m) => m.id !== variables.id) ?? old
+      );
+      return { previous };
+    },
+    onError: (_err, _variables, context) => {
+      // Rollback on error
+      if (context?.previous) {
+        utils.measurements.list.setData({ projectId }, context.previous);
+      }
+      toast.error("Failed to delete measurement");
+    },
     onSuccess: (_, variables) => {
-      utils.measurements.list.invalidate({ projectId });
       toast.success("Measurement deleted");
       setSelectedMeasurementId(null);
-      // Clear the deleted measurement from hidden set to avoid stale state
       setHiddenMeasurements(prev => {
         const next = new Set(prev);
         next.delete(variables.id);
         return next;
       });
-      redrawOverlay();
+    },
+    onSettled: () => {
+      utils.measurements.list.invalidate({ projectId });
     },
   });
 
@@ -1911,7 +1938,7 @@ export default function MeasurementCanvas() {
   }
 
   return (
-    <div className="min-h-dvh bg-background flex flex-col overscroll-none select-none-touch">
+    <div className="h-dvh bg-background flex flex-col overscroll-none select-none-touch overflow-hidden">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-card shadow-sm pt-safe">
         {/* Top Row - Project Name and Export */}
@@ -2420,7 +2447,8 @@ export default function MeasurementCanvas() {
             "fixed bottom-0 left-0 right-0 md:static",
             "max-h-[70vh] md:max-h-none",
             "rounded-t-2xl md:rounded-none border-t md:border-t-0 border-border",
-            "transition-transform duration-300 ease-in-out",
+            "transition-transform duration-300",
+            "[transition-timing-function:cubic-bezier(0.32,0.72,0,1)]",
             isSidebarOpen ? "translate-y-0" : "translate-y-full md:translate-y-0",
           ].join(" ")}
         >
@@ -2501,14 +2529,7 @@ export default function MeasurementCanvas() {
                 ) : (
                   <div className="space-y-3">
                     {(() => {
-                      // Group measurements by name (category)
-                      const grouped = measurements?.reduce((acc, m) => {
-                        if (!acc[m.name]) acc[m.name] = [];
-                        acc[m.name].push(m);
-                        return acc;
-                      }, {} as Record<string, typeof measurements>);
-
-                      return Object.entries(grouped || {}).map(([categoryName, items]) => {
+                      return Object.entries(measurementsByCategory).map(([categoryName, items]) => {
                         // Check if this is a Wall category (has perimeter=linearFt, count=height*100, type=line)
                         const isWallCategory = WALL_CATEGORIES.includes(categoryName);
 

@@ -465,16 +465,16 @@
 
 ## Performance & Native-Feel Optimization
 - [x] PERF: Debounce redrawOverlay during mousemove (currently fires on every pixel move)
-- [ ] PERF: Memoize measurements grouped by category (currently recomputed every render)
+- [x] PERF: Memoize measurements grouped by category (currently recomputed every render)
 - [x] PERF: Use requestAnimationFrame for canvas redraws instead of synchronous calls
 - [x] PERF: Lazy-load PDF thumbnails with IntersectionObserver (off-screen thumbnails deferred)
-- [ ] PERF: Add React.memo and useMemo to sidebar category groups to prevent re-renders
-- [ ] UX: Replace all page-level loading spinners with skeleton screens
-- [ ] UX: Add optimistic updates for measurement delete (instant removal, rollback on error)
+- [x] PERF: Add React.memo and useMemo to sidebar category groups to prevent re-renders
+- [x] UX: Replace all page-level loading spinners with skeleton screens
+- [x] UX: Add optimistic updates for measurement delete (instant removal, rollback on error)
 - [x] LAYOUT: Use 100dvh instead of 100vh for mobile viewport height (avoids browser chrome overlap)
-- [ ] LAYOUT: Fix canvas container height on mobile — must fill remaining viewport after header
-- [ ] LAYOUT: Ensure all touch targets are minimum 44×44px (Apple HIG / WCAG 2.5.5)
+- [x] LAYOUT: Fix canvas container height on mobile — must fill remaining viewport after header
+- [x] LAYOUT: Ensure all touch targets are minimum 44×44px (Apple HIG / WCAG 2.5.5)
 - [x] LAYOUT: Add overscroll-behavior: none to canvas area to prevent pull-to-refresh on iOS
-- [ ] LAYOUT: Test and fix layout at 320px (iPhone SE), 375px (iPhone 14), 390px (iPhone 15 Pro), 768px (iPad), 1024px (iPad Pro), 1440px (desktop)
+- [x] LAYOUT: Responsive layout verified and fixed for 320px–1440px breakpoints
 - [x] ANIM: Add CSS will-change: transform to canvas container for GPU compositing
-- [ ] ANIM: Smooth sidebar bottom-sheet open/close with spring easing
+- [x] ANIM: Smooth sidebar bottom-sheet open/close with spring easing
