@@ -192,4 +192,34 @@
   .pt-safe {
     padding-top: env(safe-area-inset-top, 0px);
   }
+
+  /* Dynamic viewport height — avoids browser-chrome overlap on mobile */
+  .h-dvh { height: 100dvh; }
+  .min-h-dvh { min-height: 100dvh; }
+
+  /* Prevent iOS pull-to-refresh and bounce on canvas areas */
+  .overscroll-none {
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: auto;
+  }
+
+  /* GPU compositing hint for canvas and animated elements */
+  .gpu-layer {
+    will-change: transform;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  /* Prevent text selection during canvas interactions */
+  .select-none-touch {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Minimum tap target size (Apple HIG / WCAG 2.5.5) */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }

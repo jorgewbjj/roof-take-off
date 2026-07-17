@@ -87,7 +87,7 @@ export default function Projects() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-dvh flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -95,7 +95,7 @@ export default function Projects() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-dvh flex items-center justify-center bg-background">
         <Card className="max-w-md">
           <CardHeader>
             <CardTitle>Authentication Required</CardTitle>
@@ -112,7 +112,7 @@ export default function Projects() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       {/* Header */}
       <header className="border-b border-border bg-card">
         <div className="container py-3 flex flex-wrap items-center justify-between gap-2">

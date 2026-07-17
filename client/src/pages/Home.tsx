@@ -23,7 +23,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-dvh flex items-center justify-center bg-background">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
@@ -34,7 +34,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-accent/30 to-background">
+    <div className="min-h-dvh bg-gradient-to-br from-background via-accent/30 to-background">
       {/* Header */}
       <header className="border-b border-border/50 bg-card/80 backdrop-blur-sm">
         <div className="container py-4 flex items-center justify-between">

@@ -134,6 +134,9 @@ export default function MeasurementCanvas() {
   const panOffsetRef = useRef({ x: 0, y: 0 });
   const zoomLevelRef = useRef(1.0);
 
+  // RAF throttle ref — prevents redundant canvas redraws within the same animation frame
+  const rafIdRef = useRef<number | null>(null);
+
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
   const { data: measurements, isLoading: measurementsLoading } = trpc.measurements.list.useQuery({ projectId });
@@ -572,8 +575,16 @@ export default function MeasurementCanvas() {
     return perimeter;
   };
 
-  // Redraw overlay with measurements
-  const redrawOverlay = () => {
+  // Redraw overlay with measurements — RAF-throttled so it fires at most once per animation frame
+  const redrawOverlay = useCallback(() => {
+    if (rafIdRef.current !== null) return; // already scheduled
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      _doRedrawOverlay();
+    });
+  }, []);
+
+  const _doRedrawOverlay = () => {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
 
@@ -945,9 +956,17 @@ export default function MeasurementCanvas() {
     }
   };
 
+  // Redraw when data or view state changes (NOT on every cursor move — that is handled via RAF in mousemove)
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, cursorPosition, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage]);
+  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage]);
+
+  // Cursor-move redraws — only when actively drawing/counting (cheap path)
+  useEffect(() => {
+    if (cursorPosition && (isDrawing || isCountingMode || isCalibrating)) {
+      redrawOverlay();
+    }
+  }, [cursorPosition]);
 
   // Delete selected text annotation with Delete/Backspace key
   useEffect(() => {
@@ -1869,7 +1888,7 @@ export default function MeasurementCanvas() {
 
   if (authLoading || projectLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-dvh flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -1877,7 +1896,7 @@ export default function MeasurementCanvas() {
 
   if (!user || !project) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="min-h-dvh flex items-center justify-center bg-background">
         <Card>
           <CardHeader>
             <CardTitle>Project Not Found</CardTitle>
@@ -1892,7 +1911,7 @@ export default function MeasurementCanvas() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-dvh bg-background flex flex-col overscroll-none select-none-touch">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-card shadow-sm pt-safe">
         {/* Top Row - Project Name and Export */}
@@ -2204,10 +2223,10 @@ export default function MeasurementCanvas() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden overscroll-none">
         {/* Canvas Area */}
         <div 
-          className="flex-1 overflow-hidden p-2 md:p-6 pb-safe" 
+          className="flex-1 overflow-hidden p-2 md:p-4 pb-safe overscroll-none" 
           ref={containerRef}
           onWheel={(e) => {
             // Prevent page scrolling when mouse is over canvas area
@@ -2224,7 +2243,7 @@ export default function MeasurementCanvas() {
               transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
             }}
           >
-            <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg" />
+            <canvas ref={canvasRef} className="border border-border rounded-lg shadow-lg gpu-layer" />
             {/* Inline text editor overlay for text annotations */}
             {editingTextId !== null && (() => {
               const ann = textAnnotationsList.find(a => a.id === editingTextId);
@@ -2373,7 +2392,7 @@ export default function MeasurementCanvas() {
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              className="absolute top-0 left-0"
+              className="absolute top-0 left-0 gpu-layer"
               style={{ 
                 pointerEvents: "auto",
                 cursor: isPanning ? "grabbing" : (isDrawing ? "none" : "grab"),
