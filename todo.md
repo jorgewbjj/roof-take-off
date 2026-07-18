@@ -478,3 +478,8 @@
 - [x] LAYOUT: Responsive layout verified and fixed for 320px–1440px breakpoints
 - [x] ANIM: Add CSS will-change: transform to canvas container for GPU compositing
 - [x] ANIM: Smooth sidebar bottom-sheet open/close with spring easing
+
+## Precision Improvements (Competitive Parity)
+- [x] PRECISION: Cursor-centered zoom — zoom toward cursor position instead of canvas center (scroll wheel already correct; +/- buttons now zoom toward viewport center)
+- [x] PRECISION: Backspace removes last vertex while drawing (no need to restart on misclick)
+- [x] PRECISION: Zoom-to-fit button (F key) — Maximize2 button added to toolbar; F key shortcut; multiplicative smooth zoom

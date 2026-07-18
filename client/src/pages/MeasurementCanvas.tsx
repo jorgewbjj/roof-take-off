@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2, Type, X } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Maximize2, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2, Type, X } from "lucide-react";
 import CategoryManager from "@/components/CategoryManager";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -1006,19 +1006,32 @@ export default function MeasurementCanvas() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedTextId, editingTextId, projectId]);
 
-  // Zoom controls - keep PDF centered and stable
-  const zoomAtPoint = (newZoom: number, clientX?: number, clientY?: number) => {
+  // Zoom toward the center of the visible canvas area (used by +/- toolbar buttons)
+  const zoomTowardCenter = useCallback((delta: number) => {
+    const currentZoom = zoomLevelRef.current;
+    const currentPan = panOffsetRef.current;
+    const newZoom = Math.max(0.1, Math.min(4.0, currentZoom + delta));
+    if (newZoom === currentZoom) return;
+    const container = containerRef.current;
+    if (!container) {
+      setZoomLevel(newZoom);
+      return;
+    }
+    // Zoom toward the center of the visible container
+    const cx = container.clientWidth / 2;
+    const cy = container.clientHeight / 2;
+    const pdfX = (cx - currentPan.x) / currentZoom;
+    const pdfY = (cy - currentPan.y) / currentZoom;
+    const newPanX = cx - pdfX * newZoom;
+    const newPanY = cy - pdfY * newZoom;
+    zoomLevelRef.current = newZoom;
+    panOffsetRef.current = { x: newPanX, y: newPanY };
     setZoomLevel(newZoom);
-    // Don't adjust pan offset - let PDF stay in its current position
-  };
+    setPanOffset({ x: newPanX, y: newPanY });
+  }, []);
 
-  const handleZoomIn = () => {
-    setZoomLevel(prev => Math.min(prev + 0.01, 4.0));
-  };
-
-  const handleZoomOut = () => {
-    setZoomLevel(prev => Math.max(prev - 0.01, 0.1));
-  };
+  const handleZoomIn = useCallback(() => zoomTowardCenter(0.1), [zoomTowardCenter]);
+  const handleZoomOut = useCallback(() => zoomTowardCenter(-0.1), [zoomTowardCenter]);
 
   const handleZoomReset = () => {
     setZoomLevel(1.0);
@@ -1034,9 +1047,13 @@ export default function MeasurementCanvas() {
     const currentZoom = zoomLevelRef.current;
     const currentPan = panOffsetRef.current;
 
-    // 1% increment for smooth zooming
-    const delta = e.deltaY > 0 ? -0.01 : 0.01;
-    const newZoom = Math.max(0.1, Math.min(4.0, currentZoom + delta));
+    // Multiplicative zoom for smooth, natural feel (same as Google Maps / Figma)
+    // Scale factor: 1.05 per scroll tick, clamped to avoid jumps on fast trackpads
+    const rawDelta = Math.abs(e.deltaY);
+    const factor = e.deltaY > 0
+      ? 1 / (1 + Math.min(rawDelta, 100) * 0.001)  // zoom out
+      : 1 + Math.min(rawDelta, 100) * 0.001;        // zoom in
+    const newZoom = Math.max(0.1, Math.min(4.0, currentZoom * factor));
     if (newZoom === currentZoom) return;
 
     // Get the container element's bounding rect (the div that wraps the canvas)
@@ -2111,8 +2128,17 @@ export default function MeasurementCanvas() {
               variant="outline"
               size="sm"
               onClick={handleZoomReset}
+              title="Reset zoom (100%)"
             >
               <RotateCcw className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleFitToScreen()}
+              title="Fit to screen (F)"
+            >
+              <Maximize2 className="w-4 h-4" />
             </Button>
           </div>
 
