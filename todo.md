@@ -484,3 +484,8 @@
 - [x] PRECISION: Backspace removes last vertex while drawing (no need to restart on misclick)
 - [x] PRECISION: Zoom-to-fit button (F key) — Maximize2 button added to toolbar; F key shortcut; multiplicative smooth zoom
 - [x] Fix: Drawing mode cursor crosshair not showing and clicks not registering when drawing is started
+
+## New Features - Phase 4 (Competitive Parity)
+- [x] Ctrl+Z undo last completed measurement (delete most-recently-saved measurement without opening sidebar)
+- [x] Snap-to-existing-point: snap within 10px of any existing vertex, show green highlight indicator on canvas
+- [x] CSV export: improve Download CSV to output category totals (grouped by name) with value and unit columns

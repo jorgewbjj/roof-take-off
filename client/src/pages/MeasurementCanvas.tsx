@@ -138,6 +138,8 @@ export default function MeasurementCanvas() {
   const rafIdRef = useRef<number | null>(null);
   // Ref to always call the latest _doRedrawOverlay — avoids stale closure in the RAF wrapper
   const doRedrawRef = useRef<() => void>(() => {});
+  // Tracks the ID of the most recently saved measurement for Ctrl+Z undo
+  const lastSavedMeasurementIdRef = useRef<number | null>(null);
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -172,9 +174,13 @@ export default function MeasurementCanvas() {
   });
 
   const createMeasurementMutation = trpc.measurements.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Track the newly created measurement ID so Ctrl+Z can undo it
+      if (data && typeof data.id === 'number') {
+        lastSavedMeasurementIdRef.current = data.id;
+      }
       utils.measurements.list.invalidate({ projectId });
-      toast.success("Measurement saved");
+      toast.success("Measurement saved — Ctrl+Z to undo");
       setCurrentPolygon([]);
       setMeasurementName("");
       setIsShapeClosed(false);
@@ -384,11 +390,26 @@ export default function MeasurementCanvas() {
           handleFitToScreen();
         }
       }
+
+      // Ctrl+Z — undo last saved measurement (delete it)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        // Don't intercept if typing in an input/textarea
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        const lastId = lastSavedMeasurementIdRef.current;
+        if (lastId !== null) {
+          deleteMeasurementMutation.mutate({ id: lastId });
+          lastSavedMeasurementIdRef.current = null; // consume — only one level of undo
+        } else {
+          toast.error('Nothing to undo');
+        }
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode, handleFitToScreen]);
+  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode, handleFitToScreen, deleteMeasurementMutation]);
 
   // Prevent page scrolling with mouse wheel except in sidebar
   useEffect(() => {
@@ -940,43 +961,72 @@ export default function MeasurementCanvas() {
     });
 
     // Draw crosshair cursor
-    if (isDrawing && cursorPosition) {
-      // Check if cursor is near a snap point
-      const snapPoint = findSnapPoint(cursorPosition.x, cursorPosition.y);
+    if ((isDrawing || isCalibrating) && cursorPosition) {
+      // Snap detection: 10px threshold as specified
+      const snapPoint = isDrawing ? findSnapPoint(cursorPosition.x, cursorPosition.y, 10) : null;
       const isNearSnapPoint = snapPoint !== null;
 
-      ctx.strokeStyle = isNearSnapPoint ? "rgba(34, 197, 94, 0.9)" : "rgba(0, 0, 0, 0.8)";
-      ctx.lineWidth = 1;
+      // When snapping, move the crosshair center to the exact snap point
+      const crosshairX = isNearSnapPoint && snapPoint
+        ? snapPoint.x * zoomLevel
+        : cursorPosition.x;
+      const crosshairY = isNearSnapPoint && snapPoint
+        ? snapPoint.y * zoomLevel
+        : cursorPosition.y;
+
+      ctx.strokeStyle = isNearSnapPoint ? "rgba(34, 197, 94, 1.0)" : "rgba(0, 0, 0, 0.8)";
+      ctx.lineWidth = isNearSnapPoint ? 1.5 : 1;
       ctx.setLineDash([]);
-      
-      // Horizontal line
+
+      // Horizontal crosshair line
       ctx.beginPath();
-      ctx.moveTo(0, cursorPosition.y);
-      ctx.lineTo(canvas.width, cursorPosition.y);
-      ctx.stroke();
-      
-      // Vertical line
-      ctx.beginPath();
-      ctx.moveTo(cursorPosition.x, 0);
-      ctx.lineTo(cursorPosition.x, canvas.height);
-      ctx.stroke();
-      
-      // Center circle - larger and highlighted when near snap point
-      ctx.beginPath();
-      ctx.arc(cursorPosition.x, cursorPosition.y, isNearSnapPoint ? 12 : 8, 0, Math.PI * 2);
-      ctx.lineWidth = isNearSnapPoint ? 2 : 1;
+      ctx.moveTo(0, crosshairY);
+      ctx.lineTo(canvas.width, crosshairY);
       ctx.stroke();
 
-      // Draw snap indicator
+      // Vertical crosshair line
+      ctx.beginPath();
+      ctx.moveTo(crosshairX, 0);
+      ctx.lineTo(crosshairX, canvas.height);
+      ctx.stroke();
+
+      // Center circle
+      ctx.beginPath();
+      ctx.arc(crosshairX, crosshairY, isNearSnapPoint ? 10 : 8, 0, Math.PI * 2);
+      ctx.lineWidth = isNearSnapPoint ? 2.5 : 1;
+      ctx.stroke();
+
+      // Snap indicator: filled green circle + outer ring + "SNAP" label at the target vertex
       if (isNearSnapPoint && snapPoint) {
-        const scaledSnapPoint = { x: snapPoint.x * zoomLevel, y: snapPoint.y * zoomLevel };
+        const sx = snapPoint.x * zoomLevel;
+        const sy = snapPoint.y * zoomLevel;
+
+        // Outer pulsing ring
         ctx.strokeStyle = "rgba(34, 197, 94, 0.9)";
-        ctx.fillStyle = "rgba(34, 197, 94, 0.3)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(scaledSnapPoint.x, scaledSnapPoint.y, 10, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.arc(sx, sy, 16, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Filled inner circle
+        ctx.fillStyle = "rgba(34, 197, 94, 0.5)";
+        ctx.beginPath();
+        ctx.arc(sx, sy, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(34, 197, 94, 1.0)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // "SNAP" label above the indicator
+        ctx.font = "bold 11px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.lineWidth = 3;
+        ctx.lineJoin = "round";
+        ctx.strokeText("SNAP", sx, sy - 18);
+        ctx.fillStyle = "rgba(34, 197, 94, 1.0)";
+        ctx.fillText("SNAP", sx, sy - 18);
       }
     }
   };
@@ -1394,8 +1444,8 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    // Check for snap to existing measurement points
-    const snapPoint = findSnapPoint(x, y);
+    // Check for snap to existing measurement points (10px threshold, consistent with visual indicator)
+    const snapPoint = findSnapPoint(x, y, 10);
     if (snapPoint) {
       setCurrentPolygon([...currentPolygon, snapPoint]);
       return;
@@ -1894,44 +1944,88 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    const data = measurements.map((m) => {
-      const isWallMeasurement = WALL_CATEGORIES.includes(m.name);
-      const isPoint = !isWallMeasurement && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
-      const isLine = !isWallMeasurement && !isPoint && (m.perimeter === null || m.perimeter === undefined);
-      
-      let type: string;
-      let value: string;
-      if (isWallMeasurement) {
-        const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
-        type = 'Wall';
-        value = `${m.perimeter} ${scaleUnit} linear x ${height} ${scaleUnit} h = ${m.area} ${scaleUnit}\u00b2`;
-      } else if (isPoint) {
-        type = 'Point';
-        value = '1 item';
-      } else if (isLine) {
-        type = 'Line';
-        value = `${m.area} ${scaleUnit}`;
-      } else {
-        type = 'Area';
-        value = `${m.area} ${scaleUnit}\u00b2`;
+    // ── Section 1: Category Summary (one row per category, totals) ──────────────
+    const categoryTotals: Record<string, { type: string; total: number; unit: string; count: number }> = {};
+
+    for (const m of measurements) {
+      const isWall = WALL_CATEGORIES.includes(m.name);
+      const isPoint = !isWall && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
+      const isLine = !isWall && !isPoint && (m.perimeter === null || m.perimeter === undefined);
+
+      if (!categoryTotals[m.name]) {
+        if (isWall) {
+          categoryTotals[m.name] = { type: 'Wall', total: 0, unit: `${scaleUnit}\u00b2`, count: 0 };
+        } else if (isPoint) {
+          categoryTotals[m.name] = { type: 'Count', total: 0, unit: 'items', count: 0 };
+        } else if (isLine) {
+          categoryTotals[m.name] = { type: 'Linear', total: 0, unit: scaleUnit, count: 0 };
+        } else {
+          categoryTotals[m.name] = { type: 'Area', total: 0, unit: `${scaleUnit}\u00b2`, count: 0 };
+        }
       }
-      
-      return { name: m.name, type, value, color: m.color };
-    });
 
-    const csv = [
-      "Name,Type,Value,Color",
-      ...data.map((row) => `"${row.name}","${row.type}","${row.value}","${row.color}"`),
-    ].join("\n");
+      const entry = categoryTotals[m.name];
+      entry.count += 1;
+      if (isPoint) {
+        entry.total += 1; // each point marker = 1 item
+      } else if (isWall) {
+        entry.total += parseFloat(m.area ?? '0') || 0;
+      } else {
+        entry.total += parseFloat(m.area ?? '0') || 0;
+      }
+    }
 
-    const blob = new Blob([csv], { type: "text/csv" });
+    const summaryRows = [
+      'SUMMARY',
+      'Category,Type,Total,Unit,# Measurements',
+      ...Object.entries(categoryTotals).map(([name, d]) =>
+        `"${name}","${d.type}","${d.total.toFixed(2)}","${d.unit}","${d.count}"`
+      ),
+    ];
+
+    // ── Section 2: Individual Measurements ──────────────────────────────────────
+    const detailRows = [
+      '',
+      'DETAIL',
+      'Category,Type,Value,Unit',
+      ...measurements.map((m) => {
+        const isWall = WALL_CATEGORIES.includes(m.name);
+        const isPoint = !isWall && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
+        const isLine = !isWall && !isPoint && (m.perimeter === null || m.perimeter === undefined);
+        let type: string;
+        let value: string;
+        let unit: string;
+        if (isWall) {
+          const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
+          type = 'Wall';
+          value = `${m.perimeter} linear x ${height} h = ${m.area}`;
+          unit = `${scaleUnit}\u00b2`;
+        } else if (isPoint) {
+          type = 'Count';
+          value = '1';
+          unit = 'item';
+        } else if (isLine) {
+          type = 'Linear';
+          value = m.area ?? '0';
+          unit = scaleUnit;
+        } else {
+          type = 'Area';
+          value = m.area ?? '0';
+          unit = `${scaleUnit}\u00b2`;
+        }
+        return `"${m.name}","${type}","${value}","${unit}"`;
+      }),
+    ];
+
+    const csv = [...summaryRows, ...detailRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const a = document.createElement('a');
     a.href = url;
-    a.download = `${project?.name || "measurements"}.csv`;
+    a.download = `${project?.name || 'measurements'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("CSV exported");
+    toast.success('CSV exported — summary + detail rows');
   };
 
   if (authLoading || projectLoading) {
