@@ -136,6 +136,8 @@ export default function MeasurementCanvas() {
 
   // RAF throttle ref — prevents redundant canvas redraws within the same animation frame
   const rafIdRef = useRef<number | null>(null);
+  // Ref to always call the latest _doRedrawOverlay — avoids stale closure in the RAF wrapper
+  const doRedrawRef = useRef<() => void>(() => {});
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -603,7 +605,7 @@ export default function MeasurementCanvas() {
     if (rafIdRef.current !== null) return; // already scheduled
     rafIdRef.current = requestAnimationFrame(() => {
       rafIdRef.current = null;
-      _doRedrawOverlay();
+      doRedrawRef.current(); // always calls the latest version — no stale closure
     });
   }, []);
 
@@ -978,18 +980,24 @@ export default function MeasurementCanvas() {
       }
     }
   };
+  // Keep the ref pointing to the latest _doRedrawOverlay on every render
+  // This is what breaks the stale closure: redrawOverlay (useCallback []) always calls doRedrawRef.current,
+  // which is updated here on every render to the freshest closure with current state values.
+  doRedrawRef.current = _doRedrawOverlay;
 
   // Redraw when data or view state changes (NOT on every cursor move — that is handled via RAF in mousemove)
+  // isDrawing and isCountingMode are included so entering/exiting drawing mode triggers a redraw immediately
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage]);
+  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage, isDrawing, isCountingMode]);
 
   // Cursor-move redraws — only when actively drawing/counting (cheap path)
+  // isDrawing/isCountingMode/isCalibrating included so the condition re-evaluates when modes change
   useEffect(() => {
     if (cursorPosition && (isDrawing || isCountingMode || isCalibrating)) {
       redrawOverlay();
     }
-  }, [cursorPosition]);
+  }, [cursorPosition, isDrawing, isCountingMode, isCalibrating]);
 
   // Delete selected text annotation with Delete/Backspace key
   useEffect(() => {

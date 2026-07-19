@@ -483,3 +483,4 @@
 - [x] PRECISION: Cursor-centered zoom — zoom toward cursor position instead of canvas center (scroll wheel already correct; +/- buttons now zoom toward viewport center)
 - [x] PRECISION: Backspace removes last vertex while drawing (no need to restart on misclick)
 - [x] PRECISION: Zoom-to-fit button (F key) — Maximize2 button added to toolbar; F key shortcut; multiplicative smooth zoom
+- [x] Fix: Drawing mode cursor crosshair not showing and clicks not registering when drawing is started
