@@ -459,17 +459,42 @@ export default function MeasurementCanvas() {
         context.imageSmoothingQuality = "high";
 
         if (token.cancelled) return;
-        await page.render({ canvasContext: context, viewport, canvas }).promise;
+
+        // Start the render task so we can cancel it if needed
+        const renderTask = page.render({ canvasContext: context, viewport, canvas });
+        // Store cancel function on token so the cleanup can abort it
+        (token as any).cancelRender = () => renderTask.cancel();
+        await renderTask.promise;
         if (token.cancelled) return;
         redrawOverlay();
       } catch (err) {
-        if (token.cancelled) return; // Ignore errors from superseded renders
+        // Suppress expected cancellation errors — these happen on every zoom change
+        // when the previous render is interrupted by the next one.
+        // PDF.js throws RenderingCancelledException; we also check token.cancelled
+        // for any other error that occurs after the render was superseded.
+        if (token.cancelled) return;
+        const errName = (err as any)?.name ?? "";
+        const errMsg  = (err as any)?.message ?? "";
+        if (
+          errName === "RenderingCancelledException" ||
+          errName === "AbortException" ||
+          errMsg.includes("Rendering cancelled") ||
+          errMsg.includes("Worker was destroyed")
+        ) {
+          return; // Normal interruption — not an error
+        }
         console.error("PDF render error:", err);
         toast.error("Render failed — try zooming out or reloading the page", { id: "pdf-render-err" });
       }
     };
 
     renderPage();
+
+    // Cleanup: cancel the in-flight render when the effect re-runs or the component unmounts
+    return () => {
+      token.cancelled = true;
+      if ((token as any).cancelRender) (token as any).cancelRender();
+    };
   }, [pdfDoc, currentPage, zoomLevel]);
 
   // Add keyboard shortcuts

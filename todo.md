@@ -495,3 +495,6 @@
 
 ## Bug Fixes - Phase 6 (High-Zoom Crash)
 - [x] Fix crash when drawing at high zoom: canvas size overflow, coordinate overflow, zoom limit, RAF guard
+
+## Bug Fixes - Phase 7 (Spurious Render Toast)
+- [x] Fix spurious "Render failed" toast on normal zoom changes: suppress RenderingCancelledException and add useEffect cleanup to cancel in-flight renders
