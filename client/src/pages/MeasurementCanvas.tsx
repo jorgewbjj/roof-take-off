@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
@@ -46,6 +47,84 @@ const WALL_CATEGORIES = ["Wall"];
 
 // Preset categories that use point counting (click to place markers)
 const PRESET_POINT_COUNT_CATEGORIES = ["Curbs", "Pipes"];
+
+/**
+ * Parse an architectural scale notation string and return the scale value
+ * (real-world feet per drawing inch, at 96 DPI).
+ *
+ * Accepts formats like:
+ *   1/8" = 1'-0"   →  8.0
+ *   1/4" = 1'-0"   →  4.0
+ *   3/32" = 1'-0"  →  10.667
+ *   1/4"=1'        →  4.0
+ *   0.25" = 1'     →  4.0
+ *   1" = 10'       →  10.0  (custom)
+ *
+ * Returns null if the string cannot be parsed.
+ */
+function parseArchitecturalScale(input: string): number | null {
+  if (!input.trim()) return null;
+
+  // Normalise: remove smart quotes, collapse whitespace
+  const s = input
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .trim();
+
+  // Split on '=' — expect exactly two parts
+  const parts = s.split('=');
+  if (parts.length !== 2) return null;
+
+  const drawingPart = parts[0].trim(); // e.g. "1/8\""
+  const realPart    = parts[1].trim(); // e.g. "1'-0\""
+
+  // ── Parse drawing side (inches) ──
+  // Strip trailing inch marks and whitespace
+  const drawingClean = drawingPart.replace(/["\s]/g, '');
+
+  // Support mixed number like "1-1/2" or plain fraction "1/8" or decimal "0.125"
+  let drawingInches: number | null = null;
+  const mixedMatch = drawingClean.match(/^(\d+)-(\d+)\/(\d+)$/);
+  const fracMatch  = drawingClean.match(/^(\d+)\/(\d+)$/);
+  const decMatch   = drawingClean.match(/^(\d*\.?\d+)$/);
+
+  if (mixedMatch) {
+    drawingInches = parseInt(mixedMatch[1]) + parseInt(mixedMatch[2]) / parseInt(mixedMatch[3]);
+  } else if (fracMatch) {
+    drawingInches = parseInt(fracMatch[1]) / parseInt(fracMatch[2]);
+  } else if (decMatch) {
+    drawingInches = parseFloat(decMatch[1]);
+  }
+
+  if (drawingInches === null || drawingInches <= 0) return null;
+
+  // ── Parse real-world side (feet) ──
+  // Strip trailing inch marks and whitespace
+  const realClean = realPart.replace(/["\s]/g, '');
+
+  // Formats: "1'-0", "1'", "10'", "1.5'", "1'-6" (feet-inches)
+  let realFeet: number | null = null;
+
+  // feet-inches: e.g. 1'-0 or 1'-6
+  const feetInchMatch = realClean.match(/^(\d+)'[-]?(\d+)$/);
+  // feet only: e.g. 1' or 10'
+  const feetOnlyMatch = realClean.match(/^(\d*\.?\d+)'$/);
+  // bare number (assume feet): e.g. 10
+  const bareMatch = realClean.match(/^(\d*\.?\d+)$/);
+
+  if (feetInchMatch) {
+    realFeet = parseInt(feetInchMatch[1]) + parseInt(feetInchMatch[2]) / 12;
+  } else if (feetOnlyMatch) {
+    realFeet = parseFloat(feetOnlyMatch[1]);
+  } else if (bareMatch) {
+    realFeet = parseFloat(bareMatch[1]);
+  }
+
+  if (realFeet === null || realFeet <= 0) return null;
+
+  // scale = real feet per drawing inch
+  return realFeet / drawingInches;
+}
 
 export default function MeasurementCanvas() {
   const { id } = useParams<{ id: string }>();
@@ -100,6 +179,10 @@ export default function MeasurementCanvas() {
   const [isCountingMode, setIsCountingMode] = useState(false);
   const [showCountCategoryDialog, setShowCountCategoryDialog] = useState(false);
   const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
+  // Scale notation calibration state
+  const [showCalibrationChooser, setShowCalibrationChooser] = useState(false);
+  const [scaleNotationInput, setScaleNotationInput] = useState("");
+  const [scaleNotationError, setScaleNotationError] = useState<string | null>(null);
   const [isShapeClosed, setIsShapeClosed] = useState(false); // Track if user clicked first point to close shape
   const [isWallHeightDialogOpen, setIsWallHeightDialogOpen] = useState(false);
   const [wallHeight, setWallHeight] = useState("");
@@ -2198,7 +2281,7 @@ export default function MeasurementCanvas() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsCalibrating(true)}
+              onClick={() => setShowCalibrationChooser(true)}
             >
               Calibrate
             </Button>
@@ -3144,7 +3227,159 @@ export default function MeasurementCanvas() {
         onOpenChange={setShowCategoryManager}
       />
 
-      {/* Calibration Dialog */}
+      {/* ── Calibration Chooser Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showCalibrationChooser} onOpenChange={(open) => {
+        setShowCalibrationChooser(open);
+        if (!open) {
+          setScaleNotationInput("");
+          setScaleNotationError(null);
+        }
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Calibrate Scale</DialogTitle>
+            <DialogDescription>
+              Choose how to set the drawing scale for accurate measurements
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs defaultValue="notation">
+            <TabsList className="w-full">
+              <TabsTrigger value="notation" className="flex-1">Scale Notation</TabsTrigger>
+              <TabsTrigger value="drawline" className="flex-1">Draw a Line</TabsTrigger>
+            </TabsList>
+
+            {/* ── Tab 1: Scale Notation ── */}
+            <TabsContent value="notation" className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Type the scale shown on your drawing, e.g. <strong>1/8&quot; = 1&apos;-0&quot;</strong>.
+                The tool will compute the correct pixels-per-foot ratio automatically.
+              </p>
+
+              {/* Preset quick-select */}
+              <div className="space-y-2">
+                <Label>Common Architectural Scales</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: '1/16" = 1\'-0"', scale: 16 },
+                    { label: '3/32" = 1\'-0"', scale: 128/9 },
+                    { label: '1/8" = 1\'-0"',  scale: 8 },
+                    { label: '3/16" = 1\'-0"', scale: 64/9 },
+                    { label: '1/4" = 1\'-0"',  scale: 4 },
+                    { label: '3/8" = 1\'-0"',  scale: 8/3 },
+                    { label: '1/2" = 1\'-0"',  scale: 2 },
+                    { label: '3/4" = 1\'-0"',  scale: 4/3 },
+                    { label: '1" = 1\'-0"',    scale: 1 },
+                    { label: '1-1/2" = 1\'-0"',scale: 2/3 },
+                  ].map(({ label, scale: presetScale }) => (
+                    <Button
+                      key={label}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start font-mono text-xs h-8"
+                      onClick={() => {
+                        const newScale = presetScale;
+                        setScale(newScale);
+                        updateProjectMutation.mutate({ id: projectId, scale: newScale.toString(), scaleUnit });
+                        toast.success(`Scale set: ${label} → 1" = ${newScale.toFixed(3)} ${scaleUnit}`);
+                        setShowCalibrationChooser(false);
+                        setScaleNotationInput("");
+                        setScaleNotationError(null);
+                      }}
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Free-form input */}
+              <div className="space-y-2">
+                <Label htmlFor="scale-notation-input">Or type a custom scale</Label>
+                <Input
+                  id="scale-notation-input"
+                  value={scaleNotationInput}
+                  onChange={(e) => {
+                    setScaleNotationInput(e.target.value);
+                    setScaleNotationError(null);
+                  }}
+                  placeholder={`e.g. 1/8" = 1'-0" or 1/4"=1'`}
+                  className="font-mono"
+                />
+                {scaleNotationError && (
+                  <p className="text-xs text-destructive">{scaleNotationError}</p>
+                )}
+                {(() => {
+                  const parsed = parseArchitecturalScale(scaleNotationInput);
+                  if (parsed !== null && scaleNotationInput.trim()) {
+                    return (
+                      <p className="text-xs text-green-600 dark:text-green-400">
+                        ✓ Computed: 1 drawing inch = <strong>{parsed.toFixed(3)}</strong> {scaleUnit}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => {
+                  setShowCalibrationChooser(false);
+                  setScaleNotationInput("");
+                  setScaleNotationError(null);
+                }}>Cancel</Button>
+                <Button
+                  onClick={() => {
+                    const parsed = parseArchitecturalScale(scaleNotationInput);
+                    if (parsed === null) {
+                      setScaleNotationError(
+                        'Could not parse. Try formats like: 1/8" = 1\'-0" or 1/4"=1\' or 0.125"=1\''
+                      );
+                      return;
+                    }
+                    setScale(parsed);
+                    updateProjectMutation.mutate({ id: projectId, scale: parsed.toString(), scaleUnit });
+                    toast.success(`Scale set: 1" = ${parsed.toFixed(3)} ${scaleUnit}`);
+                    setShowCalibrationChooser(false);
+                    setScaleNotationInput("");
+                    setScaleNotationError(null);
+                  }}
+                  disabled={!scaleNotationInput.trim()}
+                >
+                  Apply Scale
+                </Button>
+              </DialogFooter>
+            </TabsContent>
+
+            {/* ── Tab 2: Draw a Line ── */}
+            <TabsContent value="drawline" className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                Click two points on a known dimension line on the drawing, then enter the real-world distance.
+              </p>
+              <div className="rounded-md bg-muted p-3 text-sm">
+                <strong>How to use:</strong>
+                <ol className="list-decimal list-inside mt-1 space-y-1 text-muted-foreground text-xs">
+                  <li>Click <strong>Start Drawing Line</strong> below to enter calibration mode</li>
+                  <li>Click the start of a known dimension on the plan</li>
+                  <li>Click the end of that dimension</li>
+                  <li>Enter the real-world length in the dialog that appears</li>
+                </ol>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowCalibrationChooser(false)}>Cancel</Button>
+                <Button onClick={() => {
+                  setShowCalibrationChooser(false);
+                  setIsCalibrating(true);
+                }}>
+                  Start Drawing Line
+                </Button>
+              </DialogFooter>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Calibration Distance Dialog (after drawing two points) ─────────────── */}
       <Dialog open={isCalibrationDialogOpen} onOpenChange={setIsCalibrationDialogOpen}>
         <DialogContent>
           <DialogHeader>

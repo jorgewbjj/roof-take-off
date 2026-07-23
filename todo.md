@@ -489,3 +489,6 @@
 - [x] Ctrl+Z undo last completed measurement (delete most-recently-saved measurement without opening sidebar)
 - [x] Snap-to-existing-point: snap within 10px of any existing vertex, show green highlight indicator on canvas
 - [x] CSV export: improve Download CSV to output category totals (grouped by name) with value and unit columns
+
+## New Features - Phase 5 (Scale Notation)
+- [x] Architectural scale notation input: type e.g. "1/8\" = 1'-0\"" to auto-calibrate without drawing a line
