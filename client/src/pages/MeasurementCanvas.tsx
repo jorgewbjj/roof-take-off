@@ -212,6 +212,10 @@ export default function MeasurementCanvas() {
   const handleCanvasClickRef = useRef<((e: React.MouseEvent<HTMLCanvasElement>) => void) | null>(null);
 
   const baseScale = 2.5; // High quality PDF rendering base scale
+  // Maximum safe canvas dimension in pixels — exceeding this causes GPU context loss / crash
+  const MAX_CANVAS_PX = 8192;
+  // Ref to cancel in-flight PDF renders when zoom changes before the previous render finishes
+  const renderCancelRef = useRef<{ cancelled: boolean }>({ cancelled: false });
 
   // Refs to always have the latest zoom/pan values without stale closures
   const panOffsetRef = useRef({ x: 0, y: 0 });
@@ -368,7 +372,7 @@ export default function MeasurementCanvas() {
     const zoomToFitWidth = containerWidth / pdfWidth;
     const zoomToFitHeight = containerHeight / pdfHeight;
     // Take the smaller ratio so the PDF fits in both dimensions, no 100% cap
-    const optimalZoom = Math.max(0.1, Math.min(4.0, Math.min(zoomToFitWidth, zoomToFitHeight)));
+    const optimalZoom = Math.max(0.1, Math.min(3.0, Math.min(zoomToFitWidth, zoomToFitHeight)));
     // Update refs immediately so any subsequent zoom events see fresh values
     zoomLevelRef.current = optimalZoom;
     panOffsetRef.current = { x: 0, y: 0 };
@@ -387,29 +391,82 @@ export default function MeasurementCanvas() {
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current) return;
 
+    // Cancel any in-flight render from a previous zoom level
+    renderCancelRef.current.cancelled = true;
+    const token = { cancelled: false };
+    renderCancelRef.current = token;
+
     const renderPage = async () => {
-      const page = await pdfDoc.getPage(currentPage);
-      const canvas = canvasRef.current!;
-      const context = canvas.getContext("2d")!;
+      try {
+        const page = await pdfDoc.getPage(currentPage);
+        if (token.cancelled) return;
 
-      // High quality rendering: base scale 2.5 for crisp text, multiplied by zoom level
-      const viewport = page.getViewport({ scale: baseScale * zoomLevel });
-      
-      // Set canvas size to match viewport
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-      if (overlayCanvasRef.current) {
-        overlayCanvasRef.current.width = viewport.width;
-        overlayCanvasRef.current.height = viewport.height;
+        // High quality rendering: base scale 2.5 for crisp text, multiplied by zoom level
+        const rawViewport = page.getViewport({ scale: baseScale * zoomLevel });
+
+        // ── Canvas size guard — prevent GPU context loss at extreme zoom ──
+        // Browsers silently lose the 2D context when canvas dimensions exceed ~8 192 px.
+        // If the desired viewport exceeds MAX_CANVAS_PX, we render at a capped size and
+        // apply a CSS scale transform so the visual result is identical.
+        const rawW = rawViewport.width;
+        const rawH = rawViewport.height;
+        const clampRatio = Math.min(1, MAX_CANVAS_PX / Math.max(rawW, rawH));
+        const renderScale = baseScale * zoomLevel * clampRatio;
+        const viewport = clampRatio < 1
+          ? page.getViewport({ scale: renderScale })
+          : rawViewport;
+
+        if (token.cancelled) return;
+
+        // Set canvas size to the (possibly clamped) viewport
+        canvas.width  = viewport.width;
+        canvas.height = viewport.height;
+
+        // Apply CSS scale to compensate for clamped render so it fills the same visual space
+        if (clampRatio < 1) {
+          const cssScale = 1 / clampRatio;
+          canvas.style.transform = `scale(${cssScale})`;
+          canvas.style.transformOrigin = "top left";
+        } else {
+          canvas.style.transform = "";
+          canvas.style.transformOrigin = "";
+        }
+
+        if (overlayCanvasRef.current) {
+          overlayCanvasRef.current.width  = viewport.width;
+          overlayCanvasRef.current.height = viewport.height;
+          if (clampRatio < 1) {
+            const cssScale = 1 / clampRatio;
+            overlayCanvasRef.current.style.transform = `scale(${cssScale})`;
+            overlayCanvasRef.current.style.transformOrigin = "top left";
+          } else {
+            overlayCanvasRef.current.style.transform = "";
+            overlayCanvasRef.current.style.transformOrigin = "";
+          }
+        }
+
+        const context = canvas.getContext("2d");
+        if (!context) {
+          toast.error("Canvas context unavailable — please zoom out for better performance", { id: "canvas-ctx-err" });
+          return;
+        }
+
+        // Enable image smoothing for better quality
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+
+        if (token.cancelled) return;
+        await page.render({ canvasContext: context, viewport, canvas }).promise;
+        if (token.cancelled) return;
+        redrawOverlay();
+      } catch (err) {
+        if (token.cancelled) return; // Ignore errors from superseded renders
+        console.error("PDF render error:", err);
+        toast.error("Render failed — try zooming out or reloading the page", { id: "pdf-render-err" });
       }
-
-      // Enable image smoothing for better quality
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = "high";
-
-      await page.render({ canvasContext: context, viewport, canvas }).promise;
-      redrawOverlay();
     };
 
     renderPage();
@@ -581,7 +638,7 @@ export default function MeasurementCanvas() {
         const centerY = center.y - rect.top;
 
         setZoomLevel(prev => {
-          const newZoom = Math.max(0.1, Math.min(4.0, prev * scaleFactor));
+          const newZoom = Math.max(0.1, Math.min(3.0, prev * scaleFactor));
           const zoomRatio = newZoom / prev;
           const canvasX = centerX - panOffset.x;
           const canvasY = centerY - panOffset.y;
@@ -717,7 +774,8 @@ export default function MeasurementCanvas() {
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return; // GPU context lost (e.g. canvas too large) — skip silently
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw saved measurements (scale coordinates with zoom level)
@@ -1151,7 +1209,7 @@ export default function MeasurementCanvas() {
   const zoomTowardCenter = useCallback((delta: number) => {
     const currentZoom = zoomLevelRef.current;
     const currentPan = panOffsetRef.current;
-    const newZoom = Math.max(0.1, Math.min(4.0, currentZoom + delta));
+    const newZoom = Math.max(0.1, Math.min(3.0, currentZoom + delta));
     if (newZoom === currentZoom) return;
     const container = containerRef.current;
     if (!container) {
@@ -1194,7 +1252,7 @@ export default function MeasurementCanvas() {
     const factor = e.deltaY > 0
       ? 1 / (1 + Math.min(rawDelta, 100) * 0.001)  // zoom out
       : 1 + Math.min(rawDelta, 100) * 0.001;        // zoom in
-    const newZoom = Math.max(0.1, Math.min(4.0, currentZoom * factor));
+    const newZoom = Math.max(0.1, Math.min(3.0, currentZoom * factor));
     if (newZoom === currentZoom) return;
 
     // Get the container element's bounding rect (the div that wraps the canvas)
@@ -2305,7 +2363,7 @@ export default function MeasurementCanvas() {
               variant="outline"
               size="sm"
               onClick={handleZoomIn}
-              disabled={zoomLevel >= 4.0}
+              disabled={zoomLevel >= 3.0}
             >
               <ZoomIn className="w-4 h-4" />
             </Button>
@@ -2542,7 +2600,8 @@ export default function MeasurementCanvas() {
               onMouseUp={handleMouseUp}
               onWheel={handleWheel}
               onMouseMove={(e) => {
-                const canvas = overlayCanvasRef.current!;
+                const canvas = overlayCanvasRef.current;
+                if (!canvas) return;
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;

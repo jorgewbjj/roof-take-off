@@ -492,3 +492,6 @@
 
 ## New Features - Phase 5 (Scale Notation)
 - [x] Architectural scale notation input: type e.g. "1/8\" = 1'-0\"" to auto-calibrate without drawing a line
+
+## Bug Fixes - Phase 6 (High-Zoom Crash)
+- [x] Fix crash when drawing at high zoom: canvas size overflow, coordinate overflow, zoom limit, RAF guard
