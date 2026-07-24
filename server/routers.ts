@@ -114,17 +114,33 @@ export const appRouter = router({
 
   measurements: router({
     list: protectedProcedure
-      .input(z.object({ projectId: z.number() }))
+      .input(z.object({
+        projectId: z.number(),
+        tabId: z.number().nullable().optional(), // null = default tab, undefined = all (legacy)
+      }))
       .query(async ({ ctx, input }) => {
         // Verify user owns this project before returning measurements
         const project = await db.getProjectById(input.projectId, ctx.user.id);
         if (!project) throw new Error('Project not found or access denied');
+        // If tabId is explicitly provided (including null), filter by tab
+        if (input.tabId !== undefined) {
+          return db.getTabMeasurements(input.projectId, input.tabId);
+        }
         return db.getProjectMeasurements(input.projectId);
+      }),
+
+    listAll: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        return db.getAllProjectMeasurements(input.projectId);
       }),
 
     create: protectedProcedure
       .input(z.object({
         projectId: z.number(),
+        tabId: z.number().nullable().optional(),
         name: z.string().min(1),
         type: z.enum(['area', 'line', 'point']).optional(),
         color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
@@ -164,17 +180,24 @@ export const appRouter = router({
 
   textAnnotations: router({
     list: protectedProcedure
-      .input(z.object({ projectId: z.number() }))
+      .input(z.object({
+        projectId: z.number(),
+        tabId: z.number().nullable().optional(),
+      }))
       .query(async ({ ctx, input }) => {
         // Verify user owns this project before returning annotations
         const project = await db.getProjectById(input.projectId, ctx.user.id);
         if (!project) throw new Error('Project not found or access denied');
+        if (input.tabId !== undefined) {
+          return db.getTabTextAnnotations(input.projectId, input.tabId);
+        }
         return db.getProjectTextAnnotations(input.projectId);
       }),
 
     create: protectedProcedure
       .input(z.object({
         projectId: z.number(),
+        tabId: z.number().nullable().optional(),
         pageNumber: z.number().default(1),
         x: z.number(),
         y: z.number(),
@@ -278,6 +301,87 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  planTabs: router({
+    list: protectedProcedure
+      .input(z.object({ projectId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const tabs = await db.getProjectPlanTabs(input.projectId);
+        // Refresh presigned URLs for all tabs
+        const tabsWithUrls = await Promise.all(
+          tabs.map(async (tab) => {
+            if (!tab.pdfKey) return tab;
+            try {
+              const { url } = await storageGet(tab.pdfKey);
+              return { ...tab, pdfUrl: url };
+            } catch {
+              return tab;
+            }
+          })
+        );
+        return tabsWithUrls;
+      }),
+
+    create: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        name: z.string().min(1).max(255),
+        pdfFile: z.object({
+          data: z.string(), // base64
+          filename: z.string(),
+          mimeType: z.string(),
+        }),
+        sortOrder: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const buffer = Buffer.from(input.pdfFile.data, 'base64');
+        const fileKey = `${ctx.user.id}/tabs/${nanoid()}-${input.pdfFile.filename}`;
+        const { url } = await storagePut(fileKey, buffer, input.pdfFile.mimeType);
+        const tabId = await db.createPlanTab({
+          projectId: input.projectId,
+          name: input.name,
+          pdfUrl: url,
+          pdfKey: fileKey,
+          sortOrder: input.sortOrder ?? 0,
+          scale: project.scale ?? '1.0000',
+          scaleUnit: project.scaleUnit ?? 'ft',
+        });
+        return { id: tabId, url };
+      }),
+
+    rename: protectedProcedure
+      .input(z.object({ id: z.number(), name: z.string().min(1).max(255) }))
+      .mutation(async ({ ctx, input }) => {
+        await db.updatePlanTab(input.id, ctx.user.id, { name: input.name });
+        return { success: true };
+      }),
+
+    updateState: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        scale: z.string().optional(),
+        scaleUnit: z.string().optional(),
+        currentPage: z.number().optional(),
+        totalPages: z.number().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { id, ...updates } = input;
+        await db.updatePlanTab(id, ctx.user.id, updates);
+        return { success: true };
+      }),
+
+    delete: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        await db.deletePlanTab(input.id, ctx.user.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
+

@@ -1,6 +1,6 @@
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation } from "../drizzle/schema";
+import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation, planTabs, InsertPlanTab } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -278,4 +278,94 @@ export async function deleteTextAnnotation(id: number, projectId: number) {
   if (!db) throw new Error("Database not available");
   await db.delete(textAnnotations)
     .where(and(eq(textAnnotations.id, id), eq(textAnnotations.projectId, projectId)));
+}
+
+// ─── Plan Tab queries ─────────────────────────────────────────────────────────
+
+export async function getProjectPlanTabs(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(planTabs)
+    .where(eq(planTabs.projectId, projectId))
+    .orderBy(planTabs.sortOrder, planTabs.createdAt);
+}
+
+export async function getPlanTabById(tabId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  // Join with projects to verify ownership
+  const result = await db.select({ tab: planTabs })
+    .from(planTabs)
+    .innerJoin(projects, eq(planTabs.projectId, projects.id))
+    .where(and(eq(planTabs.id, tabId), eq(projects.userId, userId)))
+    .limit(1);
+  return result.length > 0 ? result[0].tab : undefined;
+}
+
+export async function createPlanTab(tab: InsertPlanTab) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(planTabs).values(tab);
+  return result[0].insertId;
+}
+
+export async function updatePlanTab(
+  tabId: number,
+  userId: number,
+  updates: Partial<Pick<InsertPlanTab, 'name' | 'sortOrder' | 'pdfUrl' | 'pdfKey' | 'scale' | 'scaleUnit' | 'currentPage' | 'totalPages'>>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Verify ownership via project join
+  const tab = await getPlanTabById(tabId, userId);
+  if (!tab) throw new Error('Plan tab not found or access denied');
+  await db.update(planTabs).set(updates).where(eq(planTabs.id, tabId));
+}
+
+export async function deletePlanTab(tabId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const tab = await getPlanTabById(tabId, userId);
+  if (!tab) throw new Error('Plan tab not found or access denied');
+  // Delete associated measurements and annotations first
+  await db.delete(measurements).where(eq(measurements.tabId, tabId));
+  await db.delete(textAnnotations).where(eq(textAnnotations.tabId, tabId));
+  await db.delete(planTabs).where(eq(planTabs.id, tabId));
+}
+
+/** Get measurements for a specific tab (tabId=null means the default/original project tab) */
+export async function getTabMeasurements(projectId: number, tabId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tabId === null) {
+    return db.select().from(measurements)
+      .where(and(eq(measurements.projectId, projectId), isNull(measurements.tabId)))
+      .orderBy(desc(measurements.createdAt));
+  }
+  return db.select().from(measurements)
+    .where(and(eq(measurements.projectId, projectId), eq(measurements.tabId, tabId)))
+    .orderBy(desc(measurements.createdAt));
+}
+
+/** Get text annotations for a specific tab */
+export async function getTabTextAnnotations(projectId: number, tabId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tabId === null) {
+    return db.select().from(textAnnotations)
+      .where(and(eq(textAnnotations.projectId, projectId), isNull(textAnnotations.tabId)))
+      .orderBy(textAnnotations.createdAt);
+  }
+  return db.select().from(textAnnotations)
+    .where(and(eq(textAnnotations.projectId, projectId), eq(textAnnotations.tabId, tabId)))
+    .orderBy(textAnnotations.createdAt);
+}
+
+/** Get ALL measurements for a project across all tabs (for report generation) */
+export async function getAllProjectMeasurements(projectId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(measurements)
+    .where(eq(measurements.projectId, projectId))
+    .orderBy(measurements.tabId, desc(measurements.createdAt));
 }

@@ -501,3 +501,12 @@
 
 ## Bug Fixes - Phase 8 (Scale Notation Mismatch)
 - [x] Fix unit mismatch: scale-notation calibration produces wrong scale vs draw-line calibration for same drawing
+
+## New Features - Phase 9 (Multi-Plan Tabs)
+- [x] Add plan_tabs table to schema: id, projectId, name, sortOrder, pdfUrl, pdfName, scale, scaleUnit, currentPage, totalPages
+- [x] Link measurements table to tabId (nullable for backward compat with existing measurements)
+- [x] Add tRPC procedures: planTabs.list, planTabs.create, planTabs.rename, planTabs.delete, planTabs.updatePdf
+- [x] Build tab bar UI in MeasurementCanvas: add/rename/delete tabs, switch active tab, per-tab PDF and measurements
+- [x] Update PDF upload to associate with active tab
+- [x] Update report generator to aggregate all tabs, grouped by tab name then category
+- [x] Update CSV export to include tab column

@@ -51,6 +51,8 @@ export type InsertProject = typeof projects.$inferInsert;
 export const measurements = mysqlTable("measurements", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(),
+  /** Nullable: null = default/original project tab (backward compat); set for additional plan tabs */
+  tabId: int("tabId"),
   name: varchar("name", { length: 255 }).notNull(),
   type: mysqlEnum("type", ["area", "line", "point"]).default("area").notNull(), // Measurement type
   color: varchar("color", { length: 7 }).notNull(), // Hex color code
@@ -94,6 +96,8 @@ export type InsertCountingCategory = typeof countingCategories.$inferInsert;
 export const textAnnotations = mysqlTable("textAnnotations", {
   id: int("id").autoincrement().primaryKey(),
   projectId: int("projectId").notNull(),
+  /** Nullable: null = default/original project tab (backward compat); set for additional plan tabs */
+  tabId: int("tabId"),
   pageNumber: int("pageNumber").default(1).notNull(),
   /** X position in baseScale pixel space (same coordinate system as measurements) */
   x: float("x").notNull(),
@@ -117,3 +121,27 @@ export const textAnnotations = mysqlTable("textAnnotations", {
 
 export type TextAnnotation = typeof textAnnotations.$inferSelect;
 export type InsertTextAnnotation = typeof textAnnotations.$inferInsert;
+
+/**
+ * Plan Tabs table - each tab within a project holds a separate PDF plan
+ * with its own measurements and text annotations.
+ * tabId = null on measurements/annotations means the "default" tab
+ * (the original project PDF, for backward compatibility).
+ */
+export const planTabs = mysqlTable("planTabs", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  name: varchar("name", { length: 255 }).notNull().default("Plan 1"),
+  sortOrder: int("sortOrder").notNull().default(0),
+  pdfUrl: text("pdfUrl").notNull(),
+  pdfKey: text("pdfKey").notNull(),
+  scale: decimal("scale", { precision: 10, scale: 4 }).default("1.0000"),
+  scaleUnit: varchar("scaleUnit", { length: 20 }).default("ft"),
+  currentPage: int("currentPage").default(1).notNull(),
+  totalPages: int("totalPages").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PlanTab = typeof planTabs.$inferSelect;
+export type InsertPlanTab = typeof planTabs.$inferInsert;

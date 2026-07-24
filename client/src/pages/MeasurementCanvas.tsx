@@ -250,9 +250,51 @@ export default function MeasurementCanvas() {
   // Tracks the ID of the most recently saved measurement for Ctrl+Z undo
   const lastSavedMeasurementIdRef = useRef<number | null>(null);
 
+  // ─── Plan Tab state ──────────────────────────────────────────────────────────
+  const [activeTabId, setActiveTabId] = useState<number | null>(null); // null = original project plan
+  const [addTabDialogOpen, setAddTabDialogOpen] = useState(false);
+  const [newTabName, setNewTabName] = useState("");
+  const [newTabFile, setNewTabFile] = useState<File | null>(null);
+  const [addTabLoading, setAddTabLoading] = useState(false);
+  const [renamingTabId, setRenamingTabId] = useState<number | null>(null);
+  const [renameTabValue, setRenameTabValue] = useState("");
+  const [deleteTabConfirmId, setDeleteTabConfirmId] = useState<number | null>(null);
+
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
-  const { data: measurements, isLoading: measurementsLoading } = trpc.measurements.list.useQuery({ projectId });
+  const { data: planTabsList = [], refetch: refetchPlanTabs } = trpc.planTabs.list.useQuery({ projectId }, { enabled: !!projectId });
+  const createPlanTabMutation = trpc.planTabs.create.useMutation({
+    onSuccess: (data) => {
+      refetchPlanTabs();
+      setActiveTabId(data.id);
+      setAddTabDialogOpen(false);
+      setNewTabName("");
+      setNewTabFile(null);
+      toast.success("Plan tab added");
+    },
+    onError: () => toast.error("Failed to add plan tab"),
+  });
+  const renamePlanTabMutation = trpc.planTabs.rename.useMutation({
+    onSuccess: () => { refetchPlanTabs(); setRenamingTabId(null); },
+  });
+  const deletePlanTabMutation = trpc.planTabs.delete.useMutation({
+    onSuccess: () => {
+      refetchPlanTabs();
+      setDeleteTabConfirmId(null);
+      // If we deleted the active tab, go back to default
+      setActiveTabId(prev => (prev === deleteTabConfirmId ? null : prev));
+      toast.success("Plan tab deleted");
+    },
+    onError: () => toast.error("Failed to delete plan tab"),
+  });
+  const updatePlanTabStateMutation = trpc.planTabs.updateState.useMutation();
+
+  const { data: measurements, isLoading: measurementsLoading } = trpc.measurements.list.useQuery(
+    { projectId, tabId: activeTabId !== undefined ? activeTabId : null },
+    { enabled: !!projectId }
+  );
+  // All measurements across all tabs — used for report generation
+  const { data: allMeasurements = [] } = trpc.measurements.listAll.useQuery({ projectId }, { enabled: !!projectId });
 
   // Memoize category grouping — recomputed only when measurements change, not on every render
   const measurementsByCategory = useMemo(() => {
@@ -263,15 +305,18 @@ export default function MeasurementCanvas() {
       return acc;
     }, {} as Record<string, typeof measurements>);
   }, [measurements]);
-  const { data: textAnnotationsList = [] } = trpc.textAnnotations.list.useQuery({ projectId });
+  const { data: textAnnotationsList = [] } = trpc.textAnnotations.list.useQuery(
+    { projectId, tabId: activeTabId !== undefined ? activeTabId : null },
+    { enabled: !!projectId }
+  );
   const createTextAnnotationMutation = trpc.textAnnotations.create.useMutation({
-    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
+    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId, tabId: activeTabId !== undefined ? activeTabId : null }),
   });
   const updateTextAnnotationMutation = trpc.textAnnotations.update.useMutation({
-    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
+    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId, tabId: activeTabId !== undefined ? activeTabId : null }),
   });
   const deleteTextAnnotationMutation = trpc.textAnnotations.delete.useMutation({
-    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId }),
+    onSuccess: () => utils.textAnnotations.list.invalidate({ projectId, tabId: activeTabId !== undefined ? activeTabId : null }),
   });
 
   const updateProjectMutation = trpc.projects.update.useMutation({
@@ -288,7 +333,8 @@ export default function MeasurementCanvas() {
       if (data && typeof data.id === 'number') {
         lastSavedMeasurementIdRef.current = data.id;
       }
-      utils.measurements.list.invalidate({ projectId });
+      utils.measurements.list.invalidate({ projectId, tabId: activeTabId !== undefined ? activeTabId : null });
+      utils.measurements.listAll.invalidate({ projectId });
       toast.success("Measurement saved — Ctrl+Z to undo");
       setCurrentPolygon([]);
       setMeasurementName("");
@@ -301,19 +347,21 @@ export default function MeasurementCanvas() {
 
   const updateMeasurementMutation = trpc.measurements.update.useMutation({
     onSuccess: () => {
-      utils.measurements.list.invalidate({ projectId });
+      utils.measurements.list.invalidate({ projectId, tabId: activeTabId !== undefined ? activeTabId : null });
+      utils.measurements.listAll.invalidate({ projectId });
       toast.success("Measurement updated");
       redrawOverlay();
     },
   });
 
+  const tabIdKey = activeTabId !== undefined ? activeTabId : null;
   const deleteMeasurementMutation = trpc.measurements.delete.useMutation({
     // Optimistic update: remove from cache immediately for instant feedback
     onMutate: async (variables) => {
-      await utils.measurements.list.cancel({ projectId });
-      const previous = utils.measurements.list.getData({ projectId });
+      await utils.measurements.list.cancel({ projectId, tabId: tabIdKey });
+      const previous = utils.measurements.list.getData({ projectId, tabId: tabIdKey });
       utils.measurements.list.setData(
-        { projectId },
+        { projectId, tabId: tabIdKey },
         (old) => old?.filter((m) => m.id !== variables.id) ?? old
       );
       return { previous };
@@ -321,7 +369,7 @@ export default function MeasurementCanvas() {
     onError: (_err, _variables, context) => {
       // Rollback on error
       if (context?.previous) {
-        utils.measurements.list.setData({ projectId }, context.previous);
+        utils.measurements.list.setData({ projectId, tabId: tabIdKey }, context.previous);
       }
       toast.error("Failed to delete measurement");
     },
@@ -335,38 +383,43 @@ export default function MeasurementCanvas() {
       });
     },
     onSettled: () => {
-      utils.measurements.list.invalidate({ projectId });
+      utils.measurements.list.invalidate({ projectId, tabId: tabIdKey });
+      utils.measurements.listAll.invalidate({ projectId });
     },
   });
 
-  // Load PDF
+  // Load PDF — loads the active tab's PDF if a tab is active, otherwise the project PDF
   useEffect(() => {
-    if (!project?.pdfUrl) return;
+    // Determine which PDF URL and scale to use
+    const activeTab = activeTabId !== null ? planTabsList.find(t => t.id === activeTabId) : null;
+    const pdfUrl = activeTab ? activeTab.pdfUrl : project?.pdfUrl;
+    if (!pdfUrl) return;
 
     const loadPdf = async () => {
       try {
-        // Loading PDF from URL
         const loadingTask = pdfjsLib.getDocument({
-          url: project.pdfUrl,
+          url: pdfUrl,
           withCredentials: false,
           isEvalSupported: false,
-          httpHeaders: {
-            'Accept': 'application/pdf',
-          },
-          // Use fetch with CORS mode
+          httpHeaders: { 'Accept': 'application/pdf' },
           useSystemFonts: true,
           standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/standard_fonts/',
         });
         const pdf = await loadingTask.promise;
-        // PDF loaded successfully
         setPdfDoc(pdf);
-        setScale(parseFloat(project.scale || "1.0"));
-        setScaleUnit(project.scaleUnit || "ft");
-        setNotes(project.notes || "");
-        setNewProjectName(project.name);
+        // Load scale from active tab or project
+        if (activeTab) {
+          setScale(parseFloat(activeTab.scale || "1.0"));
+          setScaleUnit(activeTab.scaleUnit || "ft");
+          setCurrentPage(activeTab.currentPage || 1);
+        } else {
+          setScale(parseFloat(project?.scale || "1.0"));
+          setScaleUnit(project?.scaleUnit || "ft");
+        }
+        setNotes(project?.notes || "");
+        setNewProjectName(project?.name || "");
       } catch (error) {
         console.error("Error loading PDF:", error);
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         toast.error(
           `Unable to load PDF. The file may have expired or been moved. Please try uploading the PDF again.`,
           { duration: 10000 }
@@ -375,7 +428,8 @@ export default function MeasurementCanvas() {
     };
 
     loadPdf();
-  }, [project]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project, activeTabId, planTabsList]);
 
   // Fit canvas to screen - used by both auto-fit on load and F key shortcut
   const handleFitToScreen = async (silent = false) => {
@@ -1509,6 +1563,7 @@ export default function MeasurementCanvas() {
       // No existing box clicked — create a new one
       createTextAnnotationMutation.mutate({
         projectId,
+        tabId: activeTabId,
         pageNumber: currentPage,
         x: normalizedX,
         y: normalizedY,
@@ -1577,6 +1632,7 @@ export default function MeasurementCanvas() {
       const categoryName = selectedCategory || measurementName;
       createMeasurementMutation.mutate({
         projectId,
+        tabId: activeTabId,
         name: categoryName,
         type: 'point',
         color: selectedColor,
@@ -1731,6 +1787,7 @@ export default function MeasurementCanvas() {
 
     createMeasurementMutation.mutate({
       projectId,
+      tabId: activeTabId,
       name: measurementName,
       type,
       color: selectedColor,
@@ -1752,6 +1809,7 @@ export default function MeasurementCanvas() {
     // Store linearFt in perimeter field, wallArea in area field, height in a note via name
     createMeasurementMutation.mutate({
       projectId,
+      tabId: activeTabId,
       name: pendingWallMeasurement.name,
       type: 'line',
       color: pendingWallMeasurement.color,
@@ -1769,17 +1827,32 @@ export default function MeasurementCanvas() {
   };
   // Export measurements to PDF
   const exportMeasurementsPDF = async () => {
-    if (!measurements || measurements.length === 0) {
+    const allMeasurementsForExport = allMeasurements.length > 0 ? allMeasurements : (measurements ?? []);
+    if (allMeasurementsForExport.length === 0) {
       toast.error("No measurements to export");
       return;
     }
 
-    // Group measurements by category
-    const grouped = measurements.reduce((acc, m) => {
+    // Build tab name lookup: tabId -> tab name (null tabId = Plan 1)
+    const tabNameMap: Record<string, string> = { 'null': 'Plan 1' };
+    planTabsList.forEach(t => { tabNameMap[String(t.id)] = t.name; });
+
+    // Group measurements by tab, then by category within each tab
+    const groupedByTab: Record<string, Record<string, typeof allMeasurementsForExport>> = {};
+    for (const m of allMeasurementsForExport) {
+      const tabKey = m.tabId === null || m.tabId === undefined ? 'null' : String(m.tabId);
+      const tabName = tabNameMap[tabKey] ?? `Plan ${tabKey}`;
+      if (!groupedByTab[tabName]) groupedByTab[tabName] = {};
+      if (!groupedByTab[tabName][m.name]) groupedByTab[tabName][m.name] = [];
+      groupedByTab[tabName][m.name].push(m);
+    }
+
+    // For backward compat: also build flat grouped for annotated pages
+    const grouped = allMeasurementsForExport.reduce((acc, m) => {
       if (!acc[m.name]) acc[m.name] = [];
       acc[m.name].push(m);
       return acc;
-    }, {} as Record<string, typeof measurements>);
+    }, {} as Record<string, typeof allMeasurementsForExport>);
 
     // Create PDF
     const doc = new jsPDF();
@@ -1801,79 +1874,66 @@ export default function MeasurementCanvas() {
     yPos += 15;
     doc.setTextColor(0, 0, 0);
 
-      // Categories
-      Object.entries(grouped).forEach(([categoryName, items]) => {
-        // Check if this is a Wall category
+      // Render categories grouped by tab
+      const renderCategoryBlock = (categoryName: string, items: typeof allMeasurementsForExport) => {
         const isWallCat = WALL_CATEGORIES.includes(categoryName);
-
-        // Calculate totals
         const pointItems = items.filter(m => m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
         const lineItems = !isWallCat ? items.filter(m => m.type !== 'point' && (m.perimeter === null || m.perimeter === undefined)) : [];
         const areaItems = !isWallCat ? items.filter(m => m.type !== 'point' && m.perimeter !== null && m.perimeter !== undefined) : [];
-        
         const totalCount = pointItems.length;
         const totalLinearFt = lineItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
         const totalAreaSqFt = areaItems.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0);
-
-        // Wall totals
         const totalWallLinearFt = isWallCat ? items.reduce((sum, m) => sum + parseFloat(m.perimeter || '0'), 0) : 0;
         const totalWallArea = isWallCat ? items.reduce((sum, m) => sum + parseFloat(m.area || '0'), 0) : 0;
-
-        // Check if we need a new page
-        if (yPos > 270) {
-          doc.addPage();
-          yPos = 25;
-        }
-
-        // Category name
-        doc.setFontSize(14);
+        if (yPos > 270) { doc.addPage(); yPos = 25; }
+        doc.setFontSize(13);
         doc.setFont("helvetica", "bold");
-        doc.text(categoryName, margin, yPos);
-        yPos += 8;
-
-        // Totals
+        doc.text(categoryName, margin + 4, yPos);
+        yPos += 7;
         doc.setFontSize(11);
         doc.setFont("helvetica", "normal");
-        
         if (isWallCat) {
-          // Wall: show linear footage, per-item height, and total area
-          doc.text(`Total Linear: ${totalWallLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
-          yPos += 7;
-          doc.text(`Total Wall Area: ${totalWallArea.toFixed(2)} ${scaleUnit}\u00b2`, margin + 5, yPos);
-          yPos += 7;
-          // Per-item breakdown
+          doc.text(`Total Linear: ${totalWallLinearFt.toFixed(2)} ${scaleUnit}`, margin + 8, yPos); yPos += 7;
+          doc.text(`Total Wall Area: ${totalWallArea.toFixed(2)} ${scaleUnit}\u00b2`, margin + 8, yPos); yPos += 7;
           items.forEach((m, idx) => {
             if (yPos > 270) { doc.addPage(); yPos = 25; }
             const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
-            doc.setFontSize(9);
-            doc.setFont("helvetica", "normal");
-            doc.setTextColor(80, 80, 80);
-            doc.text(
-              `  Segment ${idx + 1}: ${m.perimeter} ${scaleUnit} \u00d7 ${height} ${scaleUnit} h = ${m.area} ${scaleUnit}\u00b2`,
-              margin + 5, yPos
-            );
-            doc.setTextColor(0, 0, 0);
-            yPos += 6;
+            doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80);
+            doc.text(`  Segment ${idx + 1}: ${m.perimeter} ${scaleUnit} \u00d7 ${height} ${scaleUnit} h = ${m.area} ${scaleUnit}\u00b2`, margin + 8, yPos);
+            doc.setTextColor(0, 0, 0); yPos += 6;
           });
         } else {
-          if (totalCount > 0) {
-            doc.text(`Count: ${totalCount} item${totalCount === 1 ? '' : 's'}`, margin + 5, yPos);
-            yPos += 7;
-          }
-          
-          if (totalLinearFt > 0) {
-            doc.text(`Total: ${totalLinearFt.toFixed(2)} ${scaleUnit}`, margin + 5, yPos);
-            yPos += 7;
-          }
-          
-          if (totalAreaSqFt > 0) {
-            doc.text(`Total: ${totalAreaSqFt.toFixed(2)} ${scaleUnit}\u00b2`, margin + 5, yPos);
-            yPos += 7;
-          }
+          if (totalCount > 0) { doc.text(`Count: ${totalCount} item${totalCount === 1 ? '' : 's'}`, margin + 8, yPos); yPos += 7; }
+          if (totalLinearFt > 0) { doc.text(`Total: ${totalLinearFt.toFixed(2)} ${scaleUnit}`, margin + 8, yPos); yPos += 7; }
+          if (totalAreaSqFt > 0) { doc.text(`Total: ${totalAreaSqFt.toFixed(2)} ${scaleUnit}\u00b2`, margin + 8, yPos); yPos += 7; }
         }
+        yPos += 6;
+      };
 
+      // Iterate tabs in order: Plan 1 first, then named tabs
+      const tabOrder = ['Plan 1', ...planTabsList.map(t => t.name)];
+      for (const tabName of tabOrder) {
+        if (!groupedByTab[tabName]) continue;
+        // Tab section header
+        if (yPos > 260) { doc.addPage(); yPos = 25; }
+        doc.setFontSize(15);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(30, 80, 160);
+        doc.text(tabName, margin, yPos);
+        doc.setTextColor(0, 0, 0);
+        yPos += 3;
+        // Underline
+        doc.setDrawColor(30, 80, 160);
+        doc.setLineWidth(0.5);
+        doc.line(margin, yPos, pageWidth - margin, yPos);
+        doc.setDrawColor(0, 0, 0);
         yPos += 8;
-      });
+        // Categories within this tab
+        Object.entries(groupedByTab[tabName]).forEach(([categoryName, items]) => {
+          renderCategoryBlock(categoryName, items);
+        });
+        yPos += 4;
+      }
 
     // ── Annotated Plan Pages: one page per measurement category ──────────────
     // Each category gets its own PDF page showing only that category's shapes
@@ -2127,85 +2187,78 @@ export default function MeasurementCanvas() {
 
   // Export measurements to CSV
   const exportMeasurementsCSV = () => {
-    if (!measurements || measurements.length === 0) {
+    const allMeasurementsForCSV = allMeasurements.length > 0 ? allMeasurements : (measurements ?? []);
+    if (allMeasurementsForCSV.length === 0) {
       toast.error("No measurements to export");
       return;
     }
 
-    // ── Section 1: Category Summary (one row per category, totals) ──────────────
-    const categoryTotals: Record<string, { type: string; total: number; unit: string; count: number }> = {};
+    // Build tab name lookup
+    const tabNameMapCSV: Record<string, string> = { 'null': 'Plan 1' };
+    planTabsList.forEach(t => { tabNameMapCSV[String(t.id)] = t.name; });
 
-    for (const m of measurements) {
-      const isWall = WALL_CATEGORIES.includes(m.name);
-      const isPoint = !isWall && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
-      const isLine = !isWall && !isPoint && (m.perimeter === null || m.perimeter === undefined);
+    const csvRows: string[] = [];
 
-      if (!categoryTotals[m.name]) {
-        if (isWall) {
-          categoryTotals[m.name] = { type: 'Wall', total: 0, unit: `${scaleUnit}\u00b2`, count: 0 };
-        } else if (isPoint) {
-          categoryTotals[m.name] = { type: 'Count', total: 0, unit: 'items', count: 0 };
-        } else if (isLine) {
-          categoryTotals[m.name] = { type: 'Linear', total: 0, unit: scaleUnit, count: 0 };
-        } else {
-          categoryTotals[m.name] = { type: 'Area', total: 0, unit: `${scaleUnit}\u00b2`, count: 0 };
-        }
-      }
-
-      const entry = categoryTotals[m.name];
-      entry.count += 1;
-      if (isPoint) {
-        entry.total += 1; // each point marker = 1 item
-      } else if (isWall) {
-        entry.total += parseFloat(m.area ?? '0') || 0;
-      } else {
-        entry.total += parseFloat(m.area ?? '0') || 0;
-      }
-    }
-
-    const summaryRows = [
-      'SUMMARY',
-      'Category,Type,Total,Unit,# Measurements',
-      ...Object.entries(categoryTotals).map(([name, d]) =>
-        `"${name}","${d.type}","${d.total.toFixed(2)}","${d.unit}","${d.count}"`
-      ),
-    ];
-
-    // ── Section 2: Individual Measurements ──────────────────────────────────────
-    const detailRows = [
-      '',
-      'DETAIL',
-      'Category,Type,Value,Unit',
-      ...measurements.map((m) => {
+    // Helper to compute category totals for a set of measurements
+    const buildCategoryTotals = (items: typeof allMeasurementsForCSV) => {
+      const totals: Record<string, { type: string; total: number; unit: string; count: number }> = {};
+      for (const m of items) {
         const isWall = WALL_CATEGORIES.includes(m.name);
         const isPoint = !isWall && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
         const isLine = !isWall && !isPoint && (m.perimeter === null || m.perimeter === undefined);
-        let type: string;
-        let value: string;
-        let unit: string;
-        if (isWall) {
-          const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
-          type = 'Wall';
-          value = `${m.perimeter} linear x ${height} h = ${m.area}`;
-          unit = `${scaleUnit}\u00b2`;
-        } else if (isPoint) {
-          type = 'Count';
-          value = '1';
-          unit = 'item';
-        } else if (isLine) {
-          type = 'Linear';
-          value = m.area ?? '0';
-          unit = scaleUnit;
-        } else {
-          type = 'Area';
-          value = m.area ?? '0';
-          unit = `${scaleUnit}\u00b2`;
+        if (!totals[m.name]) {
+          if (isWall) totals[m.name] = { type: 'Wall', total: 0, unit: `${scaleUnit}\u00b2`, count: 0 };
+          else if (isPoint) totals[m.name] = { type: 'Count', total: 0, unit: 'items', count: 0 };
+          else if (isLine) totals[m.name] = { type: 'Linear', total: 0, unit: scaleUnit, count: 0 };
+          else totals[m.name] = { type: 'Area', total: 0, unit: `${scaleUnit}\u00b2`, count: 0 };
         }
-        return `"${m.name}","${type}","${value}","${unit}"`;
-      }),
-    ];
+        const entry = totals[m.name];
+        entry.count += 1;
+        entry.total += isPoint ? 1 : (parseFloat(m.area ?? '0') || 0);
+      }
+      return totals;
+    };
 
-    const csv = [...summaryRows, ...detailRows].join('\n');
+    const detailRow = (m: typeof allMeasurementsForCSV[0]) => {
+      const isWall = WALL_CATEGORIES.includes(m.name);
+      const isPoint = !isWall && (m.type === 'point' || (m.count !== null && m.count !== undefined && m.type !== 'line'));
+      const isLine = !isWall && !isPoint && (m.perimeter === null || m.perimeter === undefined);
+      if (isWall) {
+        const height = m.count != null ? (m.count / 1000).toFixed(2) : '?';
+        return `"${m.name}","Wall","${m.perimeter} linear x ${height} h = ${m.area}","${scaleUnit}\u00b2"`;
+      } else if (isPoint) return `"${m.name}","Count","1","item"`;
+      else if (isLine) return `"${m.name}","Linear","${m.area ?? '0'}","${scaleUnit}"`;
+      else return `"${m.name}","Area","${m.area ?? '0'}","${scaleUnit}\u00b2"`;
+    };
+
+    // Group by tab
+    const tabOrder = ['Plan 1', ...planTabsList.map(t => t.name)];
+    const groupedByTabCSV: Record<string, typeof allMeasurementsForCSV> = {};
+    for (const m of allMeasurementsForCSV) {
+      const tabKey = m.tabId === null || m.tabId === undefined ? 'null' : String(m.tabId);
+      const tabName = tabNameMapCSV[tabKey] ?? `Plan ${tabKey}`;
+      if (!groupedByTabCSV[tabName]) groupedByTabCSV[tabName] = [];
+      groupedByTabCSV[tabName].push(m);
+    }
+
+    for (const tabName of tabOrder) {
+      if (!groupedByTabCSV[tabName]) continue;
+      const tabItems = groupedByTabCSV[tabName];
+      csvRows.push(`"=== ${tabName} ==="`);
+      csvRows.push('SUMMARY');
+      csvRows.push('Category,Type,Total,Unit,# Measurements');
+      const totals = buildCategoryTotals(tabItems);
+      Object.entries(totals).forEach(([name, d]) => {
+        csvRows.push(`"${name}","${d.type}","${d.total.toFixed(2)}","${d.unit}","${d.count}"`);
+      });
+      csvRows.push('');
+      csvRows.push('DETAIL');
+      csvRows.push('Category,Type,Value,Unit');
+      tabItems.forEach(m => csvRows.push(detailRow(m)));
+      csvRows.push('');
+    }
+
+    const csv = csvRows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -2213,7 +2266,7 @@ export default function MeasurementCanvas() {
     a.download = `${project?.name || 'measurements'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success('CSV exported — summary + detail rows');
+    toast.success('CSV exported — all plans included');
   };
 
   if (authLoading || projectLoading) {
@@ -2560,6 +2613,90 @@ export default function MeasurementCanvas() {
           )}
         </div>
       </header>
+
+      {/* Plan Tab Bar */}
+      <div className="flex items-center gap-0 border-b border-border bg-muted/40 px-2 overflow-x-auto shrink-0" style={{ minHeight: '38px' }}>
+        {/* Default tab: original project plan */}
+        <button
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-t border-b-2 transition-colors whitespace-nowrap ${
+            activeTabId === null
+              ? 'border-primary text-primary bg-background'
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
+          }`}
+          onClick={() => setActiveTabId(null)}
+        >
+          <FileText className="w-3.5 h-3.5" />
+          Plan 1
+        </button>
+
+        {/* Additional plan tabs */}
+        {planTabsList.map((tab) => (
+          <div key={tab.id} className="relative group flex items-center">
+            {renamingTabId === tab.id ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (renameTabValue.trim()) {
+                    renamePlanTabMutation.mutate({ id: tab.id, name: renameTabValue.trim() });
+                  } else {
+                    setRenamingTabId(null);
+                  }
+                }}
+                className="flex items-center gap-1 px-2"
+              >
+                <input
+                  autoFocus
+                  value={renameTabValue}
+                  onChange={(e) => setRenameTabValue(e.target.value)}
+                  onBlur={() => {
+                    if (renameTabValue.trim()) {
+                      renamePlanTabMutation.mutate({ id: tab.id, name: renameTabValue.trim() });
+                    } else {
+                      setRenamingTabId(null);
+                    }
+                  }}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setRenamingTabId(null); }}
+                  className="w-28 h-6 text-sm px-1 border border-border rounded bg-background"
+                />
+              </form>
+            ) : (
+              <button
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-t border-b-2 transition-colors whitespace-nowrap ${
+                  activeTabId === tab.id
+                    ? 'border-primary text-primary bg-background'
+                    : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+                onClick={() => setActiveTabId(tab.id)}
+                onDoubleClick={() => { setRenamingTabId(tab.id); setRenameTabValue(tab.name); }}
+                title="Double-click to rename"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="max-w-[100px] truncate">{tab.name}</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded hover:bg-destructive/20 hover:text-destructive p-0.5"
+                  onClick={(e) => { e.stopPropagation(); setDeleteTabConfirmId(tab.id); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setDeleteTabConfirmId(tab.id); } }}
+                  title="Delete tab"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              </button>
+            )}
+          </div>
+        ))}
+
+        {/* Add tab button */}
+        <button
+          className="flex items-center gap-1 px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors ml-1 whitespace-nowrap"
+          onClick={() => setAddTabDialogOpen(true)}
+          title="Add plan tab"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline text-xs">Add Plan</span>
+        </button>
+      </div>
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden overscroll-none">
@@ -3391,7 +3528,11 @@ export default function MeasurementCanvas() {
                       onClick={() => {
                         const newScale = presetScale;
                         setScale(newScale);
-                        updateProjectMutation.mutate({ id: projectId, scale: newScale.toString(), scaleUnit });
+                        if (activeTabId !== null) {
+                          updatePlanTabStateMutation.mutate({ id: activeTabId, scale: newScale.toString(), scaleUnit });
+                        } else {
+                          updateProjectMutation.mutate({ id: projectId, scale: newScale.toString(), scaleUnit });
+                        }
                         toast.success(`Scale set: ${label} → 1" = ${newScale.toFixed(3)} ${scaleUnit}`);
                         setShowCalibrationChooser(false);
                         setScaleNotationInput("");
@@ -3452,7 +3593,11 @@ export default function MeasurementCanvas() {
                       return;
                     }
                     setScale(parsed);
-                    updateProjectMutation.mutate({ id: projectId, scale: parsed.toString(), scaleUnit });
+                    if (activeTabId !== null) {
+                      updatePlanTabStateMutation.mutate({ id: activeTabId, scale: parsed.toString(), scaleUnit });
+                    } else {
+                      updateProjectMutation.mutate({ id: projectId, scale: parsed.toString(), scaleUnit });
+                    }
                     toast.success(`Scale set: 1" = ${parsed.toFixed(3)} ${scaleUnit}`);
                     setShowCalibrationChooser(false);
                     setScaleNotationInput("");
@@ -3554,12 +3699,12 @@ export default function MeasurementCanvas() {
                   
                   setScale(newScale);
                   
-                  // Save to database
-                  updateProjectMutation.mutate({
-                    id: projectId,
-                    scale: newScale.toString(),
-                    scaleUnit,
-                  });
+                  // Save to database (tab-aware)
+                  if (activeTabId !== null) {
+                    updatePlanTabStateMutation.mutate({ id: activeTabId, scale: newScale.toString(), scaleUnit });
+                  } else {
+                    updateProjectMutation.mutate({ id: projectId, scale: newScale.toString(), scaleUnit });
+                  }
                   
                   toast.success(`Scale calibrated: 1 inch = ${newScale.toFixed(2)} ${scaleUnit}`);
                   
@@ -3573,6 +3718,95 @@ export default function MeasurementCanvas() {
               disabled={!calibrationDistance}
             >
               Apply Calibration
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Add Plan Tab Dialog ─────────────────────────────────────────────────── */}
+      <Dialog open={addTabDialogOpen} onOpenChange={(open) => {
+        setAddTabDialogOpen(open);
+        if (!open) { setNewTabName(""); setNewTabFile(null); }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Plan Tab</DialogTitle>
+            <DialogDescription>Upload a PDF for this plan and give it a name.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="new-tab-name">Plan Name</Label>
+              <Input
+                id="new-tab-name"
+                value={newTabName}
+                onChange={(e) => setNewTabName(e.target.value)}
+                placeholder="e.g. Roof Plan, Floor 2, Elevation A"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-tab-pdf">PDF File</Label>
+              <Input
+                id="new-tab-pdf"
+                type="file"
+                accept=".pdf"
+                onChange={(e) => setNewTabFile(e.target.files?.[0] ?? null)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddTabDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!newTabName.trim() || !newTabFile || addTabLoading}
+              onClick={async () => {
+                if (!newTabFile || !newTabName.trim()) return;
+                setAddTabLoading(true);
+                try {
+                  // Convert File to base64 for tRPC upload
+                  const arrayBuffer = await newTabFile.arrayBuffer();
+                  const base64 = btoa(
+                    new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
+                  );
+                  createPlanTabMutation.mutate({
+                    projectId,
+                    name: newTabName.trim(),
+                    pdfFile: {
+                      data: base64,
+                      filename: newTabFile.name,
+                      mimeType: newTabFile.type || 'application/pdf',
+                    },
+                  });
+                } catch (err) {
+                  toast.error('Failed to upload PDF');
+                  setAddTabLoading(false);
+                }
+              }}
+            >
+              {addTabLoading ? 'Uploading...' : 'Add Plan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete Plan Tab Confirmation ────────────────────────────────────────── */}
+      <Dialog open={deleteTabConfirmId !== null} onOpenChange={(open) => { if (!open) setDeleteTabConfirmId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete Plan Tab?</DialogTitle>
+            <DialogDescription>
+              This will permanently delete the plan tab and all its measurements. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTabConfirmId(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteTabConfirmId !== null) {
+                  deletePlanTabMutation.mutate({ id: deleteTabConfirmId });
+                }
+              }}
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
