@@ -259,6 +259,8 @@ export default function MeasurementCanvas() {
   const [renamingTabId, setRenamingTabId] = useState<number | null>(null);
   const [renameTabValue, setRenameTabValue] = useState("");
   const [deleteTabConfirmId, setDeleteTabConfirmId] = useState<number | null>(null);
+  const [renamingDefaultTab, setRenamingDefaultTab] = useState(false);
+  const [renameDefaultTabValue, setRenameDefaultTabValue] = useState("");
 
   const utils = trpc.useUtils();
   const { data: project, isLoading: projectLoading } = trpc.projects.get.useQuery({ id: projectId });
@@ -1834,7 +1836,8 @@ export default function MeasurementCanvas() {
     }
 
     // Build tab name lookup: tabId -> tab name (null tabId = Plan 1)
-    const tabNameMap: Record<string, string> = { 'null': 'Plan 1' };
+    const defaultTabLabel = project?.defaultTabName || 'Plan 1';
+    const tabNameMap: Record<string, string> = { 'null': defaultTabLabel };
     planTabsList.forEach(t => { tabNameMap[String(t.id)] = t.name; });
 
     // Group measurements by tab, then by category within each tab
@@ -1911,7 +1914,7 @@ export default function MeasurementCanvas() {
       };
 
       // Iterate tabs in order: Plan 1 first, then named tabs
-      const tabOrder = ['Plan 1', ...planTabsList.map(t => t.name)];
+      const tabOrder = [defaultTabLabel, ...planTabsList.map(t => t.name)];
       for (const tabName of tabOrder) {
         if (!groupedByTab[tabName]) continue;
         // Tab section header
@@ -2194,7 +2197,8 @@ export default function MeasurementCanvas() {
     }
 
     // Build tab name lookup
-    const tabNameMapCSV: Record<string, string> = { 'null': 'Plan 1' };
+    const defaultTabLabelCSV = project?.defaultTabName || 'Plan 1';
+    const tabNameMapCSV: Record<string, string> = { 'null': defaultTabLabelCSV };
     planTabsList.forEach(t => { tabNameMapCSV[String(t.id)] = t.name; });
 
     const csvRows: string[] = [];
@@ -2232,7 +2236,7 @@ export default function MeasurementCanvas() {
     };
 
     // Group by tab
-    const tabOrder = ['Plan 1', ...planTabsList.map(t => t.name)];
+    const tabOrder = [defaultTabLabelCSV, ...planTabsList.map(t => t.name)];
     const groupedByTabCSV: Record<string, typeof allMeasurementsForCSV> = {};
     for (const m of allMeasurementsForCSV) {
       const tabKey = m.tabId === null || m.tabId === undefined ? 'null' : String(m.tabId);
@@ -2616,18 +2620,62 @@ export default function MeasurementCanvas() {
 
       {/* Plan Tab Bar */}
       <div className="flex items-center gap-0 border-b border-border bg-muted/40 px-2 overflow-x-auto shrink-0" style={{ minHeight: '38px' }}>
-        {/* Default tab: original project plan */}
-        <button
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-t border-b-2 transition-colors whitespace-nowrap ${
-            activeTabId === null
-              ? 'border-primary text-primary bg-background'
-              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
-          }`}
-          onClick={() => setActiveTabId(null)}
-        >
-          <FileText className="w-3.5 h-3.5" />
-          Plan 1
-        </button>
+        {/* Default tab: original project plan — double-click to rename */}
+        <div className="relative group flex items-center">
+          {renamingDefaultTab ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const trimmed = renameDefaultTabValue.trim();
+                if (trimmed) {
+                  updateProjectMutation.mutate(
+                    { id: projectId, defaultTabName: trimmed },
+                    { onSuccess: () => { setRenamingDefaultTab(false); toast.success("Plan renamed"); } }
+                  );
+                } else {
+                  setRenamingDefaultTab(false);
+                }
+              }}
+              className="flex items-center gap-1 px-2"
+            >
+              <input
+                autoFocus
+                value={renameDefaultTabValue}
+                onChange={(e) => setRenameDefaultTabValue(e.target.value)}
+                onBlur={() => {
+                  const trimmed = renameDefaultTabValue.trim();
+                  if (trimmed) {
+                    updateProjectMutation.mutate(
+                      { id: projectId, defaultTabName: trimmed },
+                      { onSuccess: () => { setRenamingDefaultTab(false); } }
+                    );
+                  } else {
+                    setRenamingDefaultTab(false);
+                  }
+                }}
+                onKeyDown={(e) => { if (e.key === 'Escape') setRenamingDefaultTab(false); }}
+                className="w-28 h-6 text-sm px-1 border border-border rounded bg-background"
+              />
+            </form>
+          ) : (
+            <button
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-t border-b-2 transition-colors whitespace-nowrap ${
+                activeTabId === null
+                  ? 'border-primary text-primary bg-background'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+              onClick={() => setActiveTabId(null)}
+              onDoubleClick={() => {
+                setRenamingDefaultTab(true);
+                setRenameDefaultTabValue(project?.defaultTabName || 'Plan 1');
+              }}
+              title="Double-click to rename"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span className="max-w-[100px] truncate">{project?.defaultTabName || 'Plan 1'}</span>
+            </button>
+          )}
+        </div>
 
         {/* Additional plan tabs */}
         {planTabsList.map((tab) => (

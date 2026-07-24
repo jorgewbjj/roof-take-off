@@ -37,6 +37,8 @@ export const projects = mysqlTable("projects", {
   scale: decimal("scale", { precision: 10, scale: 4 }).default("1.0000"),
   scaleUnit: varchar("scaleUnit", { length: 20 }).default("ft"),
   notes: text("notes"),
+  /** Custom name for the default (Plan 1) tab. Null = display as "Plan 1" */
+  defaultTabName: varchar("defaultTabName", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

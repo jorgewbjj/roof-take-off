@@ -510,3 +510,6 @@
 - [x] Update PDF upload to associate with active tab
 - [x] Update report generator to aggregate all tabs, grouped by tab name then category
 - [x] Update CSV export to include tab column
+
+## New Features - Phase 10 (Tab Rename)
+- [x] Allow renaming any plan tab (including Plan 1) at any time: double-click inline edit or rename button

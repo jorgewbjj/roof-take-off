@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `defaultTabName` varchar(255);

@@ -64,6 +64,13 @@
       "when": 1784904098950,
       "tag": "0008_gigantic_obadiah_stane",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1784905722135,
+      "tag": "0009_hard_proteus",
+      "breakpoints": true
     }
   ]
 }

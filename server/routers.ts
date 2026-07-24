@@ -97,6 +97,7 @@ export const appRouter = router({
         scale: z.string().optional(),
         scaleUnit: z.string().optional(),
         notes: z.string().optional(),
+        defaultTabName: z.string().min(1).max(255).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         const { id, ...updates } = input;
