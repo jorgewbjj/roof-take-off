@@ -122,8 +122,30 @@ function parseArchitecturalScale(input: string): number | null {
 
   if (realFeet === null || realFeet <= 0) return null;
 
-  // scale = real feet per drawing inch
-  return realFeet / drawingInches;
+  // ── Unit alignment with the draw-line calibration path ──
+  //
+  // The draw-line path stores coordinates in "baseScale PDF pixels" (PDF.js renders
+  // at baseScale=2.5 × 72 DPI = 180 px/inch of physical paper).  It then converts
+  // to a synthetic inch unit by dividing by 96:
+  //
+  //   inchDistance = pixelDistance / 96
+  //   scale        = knownFeet / inchDistance
+  //
+  // So scale = real feet per (96 baseScale-pixels).
+  // 96 baseScale-pixels = 96 / (baseScale × 72) physical paper inches
+  //                     = 96 / (2.5 × 72) = 96 / 180 ≈ 0.5333 physical paper inches.
+  //
+  // The notation "1/8\" = 1'-0\"" means 1 physical paper inch → 8 real feet.
+  // We need to convert to: (96/180) physical paper inches → ? real feet
+  //   = 8 × (96/180) = 8 × 0.5333 ≈ 4.267 real feet per synthetic inch.
+  //
+  // Correction factor: 96 / (baseScale × PDF_DPI) = 96 / (2.5 × 72) = 96 / 180
+  const BASE_SCALE = 2.5;
+  const PDF_DPI    = 72;  // PDF points per physical inch (standard)
+  const RENDER_DPI = 96;  // synthetic DPI used by the draw-line path
+  const correctionFactor = RENDER_DPI / (BASE_SCALE * PDF_DPI); // ≈ 0.5333
+
+  return (realFeet / drawingInches) * correctionFactor;
 }
 
 export default function MeasurementCanvas() {
@@ -3344,18 +3366,23 @@ export default function MeasurementCanvas() {
               <div className="space-y-2">
                 <Label>Common Architectural Scales</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { label: '1/16" = 1\'-0"', scale: 16 },
-                    { label: '3/32" = 1\'-0"', scale: 128/9 },
-                    { label: '1/8" = 1\'-0"',  scale: 8 },
-                    { label: '3/16" = 1\'-0"', scale: 64/9 },
-                    { label: '1/4" = 1\'-0"',  scale: 4 },
-                    { label: '3/8" = 1\'-0"',  scale: 8/3 },
-                    { label: '1/2" = 1\'-0"',  scale: 2 },
-                    { label: '3/4" = 1\'-0"',  scale: 4/3 },
-                    { label: '1" = 1\'-0"',    scale: 1 },
-                    { label: '1-1/2" = 1\'-0"',scale: 2/3 },
-                  ].map(({ label, scale: presetScale }) => (
+                  {(() => {
+                    // Correction factor: same as parseArchitecturalScale
+                    // 96 / (baseScale × PDF_DPI) = 96 / (2.5 × 72) = 96/180
+                    const cf = 96 / (2.5 * 72);
+                    return [
+                      { label: '1/16" = 1\'-0"', scale: 16 * cf },
+                      { label: '3/32" = 1\'-0"', scale: (128/9) * cf },
+                      { label: '1/8" = 1\'-0"',  scale: 8 * cf },
+                      { label: '3/16" = 1\'-0"', scale: (64/9) * cf },
+                      { label: '1/4" = 1\'-0"',  scale: 4 * cf },
+                      { label: '3/8" = 1\'-0"',  scale: (8/3) * cf },
+                      { label: '1/2" = 1\'-0"',  scale: 2 * cf },
+                      { label: '3/4" = 1\'-0"',  scale: (4/3) * cf },
+                      { label: '1" = 1\'-0"',    scale: 1 * cf },
+                      { label: '1-1/2" = 1\'-0"',scale: (2/3) * cf },
+                    ];
+                  })().map(({ label, scale: presetScale }) => (
                     <Button
                       key={label}
                       variant="outline"
@@ -3396,9 +3423,12 @@ export default function MeasurementCanvas() {
                 {(() => {
                   const parsed = parseArchitecturalScale(scaleNotationInput);
                   if (parsed !== null && scaleNotationInput.trim()) {
+                    // Convert back to human-readable "1 paper inch = X ft" for display
+                    const cf = 96 / (2.5 * 72);
+                    const paperInchFt = parsed / cf;
                     return (
                       <p className="text-xs text-green-600 dark:text-green-400">
-                        ✓ Computed: 1 drawing inch = <strong>{parsed.toFixed(3)}</strong> {scaleUnit}
+                        ✓ 1 paper inch = <strong>{paperInchFt.toFixed(3)}</strong> {scaleUnit} (scale applied)
                       </p>
                     );
                   }

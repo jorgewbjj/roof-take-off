@@ -498,3 +498,6 @@
 
 ## Bug Fixes - Phase 7 (Spurious Render Toast)
 - [x] Fix spurious "Render failed" toast on normal zoom changes: suppress RenderingCancelledException and add useEffect cleanup to cancel in-flight renders
+
+## Bug Fixes - Phase 8 (Scale Notation Mismatch)
+- [x] Fix unit mismatch: scale-notation calibration produces wrong scale vs draw-line calibration for same drawing
