@@ -382,7 +382,163 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  cutouts: router({
+    list: protectedProcedure
+      .input(z.object({ projectId: z.number(), tabId: z.number().nullable() }))
+      .query(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        return db.getTabCutouts(input.projectId, input.tabId);
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        tabId: z.number().nullable().optional(),
+        parentMeasurementId: z.number(),
+        name: z.string().min(1).max(255).optional(),
+        area: z.string(),
+        coordinates: z.array(z.object({ x: z.number(), y: z.number() })),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const id = await db.createCutout({
+          projectId: input.projectId,
+          tabId: input.tabId ?? null,
+          parentMeasurementId: input.parentMeasurementId,
+          name: input.name ?? 'Cutout',
+          area: input.area,
+          coordinates: input.coordinates,
+        });
+        return { id };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        await db.deleteCutout(input.id, input.projectId);
+        return { success: true };
+      }),
+  }),
+
+  dimensionLines: router({
+    list: protectedProcedure
+      .input(z.object({ projectId: z.number(), tabId: z.number().nullable() }))
+      .query(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        return db.getTabDimensionLines(input.projectId, input.tabId);
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        tabId: z.number().nullable().optional(),
+        x1: z.number(), y1: z.number(),
+        x2: z.number(), y2: z.number(),
+        offsetPx: z.number().optional(),
+        customLabel: z.string().max(100).optional(),
+        color: z.string().max(7).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const id = await db.createDimensionLine({
+          projectId: input.projectId,
+          tabId: input.tabId ?? null,
+          x1: input.x1, y1: input.y1,
+          x2: input.x2, y2: input.y2,
+          offsetPx: input.offsetPx ?? 40,
+          customLabel: input.customLabel ?? null,
+          color: input.color ?? '#1e40af',
+        });
+        return { id };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(), projectId: z.number(),
+        offsetPx: z.number().optional(),
+        customLabel: z.string().max(100).nullable().optional(),
+        color: z.string().max(7).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const { id, projectId, ...updates } = input;
+        await db.updateDimensionLine(id, projectId, updates);
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        await db.deleteDimensionLine(input.id, input.projectId);
+        return { success: true };
+      }),
+  }),
+
+  callouts: router({
+    list: protectedProcedure
+      .input(z.object({ projectId: z.number(), tabId: z.number().nullable() }))
+      .query(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        return db.getTabCallouts(input.projectId, input.tabId);
+      }),
+    create: protectedProcedure
+      .input(z.object({
+        projectId: z.number(),
+        tabId: z.number().nullable().optional(),
+        anchorX: z.number(), anchorY: z.number(),
+        bubbleX: z.number(), bubbleY: z.number(),
+        bubbleW: z.number().optional(), bubbleH: z.number().optional(),
+        text: z.string().max(500).optional(),
+        color: z.string().max(7).optional(),
+        textColor: z.string().max(7).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const id = await db.createCallout({
+          projectId: input.projectId,
+          tabId: input.tabId ?? null,
+          anchorX: input.anchorX, anchorY: input.anchorY,
+          bubbleX: input.bubbleX, bubbleY: input.bubbleY,
+          bubbleW: input.bubbleW ?? 160, bubbleH: input.bubbleH ?? 60,
+          text: input.text ?? 'Label',
+          color: input.color ?? '#fef9c3',
+          textColor: input.textColor ?? '#1e293b',
+        });
+        return { id };
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        id: z.number(), projectId: z.number(),
+        anchorX: z.number().optional(), anchorY: z.number().optional(),
+        bubbleX: z.number().optional(), bubbleY: z.number().optional(),
+        bubbleW: z.number().optional(), bubbleH: z.number().optional(),
+        text: z.string().max(500).optional(),
+        color: z.string().max(7).optional(),
+        textColor: z.string().max(7).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        const { id, projectId, ...updates } = input;
+        await db.updateCallout(id, projectId, updates);
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ id: z.number(), projectId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const project = await db.getProjectById(input.projectId, ctx.user.id);
+        if (!project) throw new Error('Project not found or access denied');
+        await db.deleteCallout(input.id, input.projectId);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
-

@@ -513,3 +513,11 @@
 
 ## New Features - Phase 10 (Tab Rename)
 - [x] Allow renaming any plan tab (including Plan 1) at any time: double-click inline edit or rename button
+
+## New Features - Phase 11 (Commercial Canvas Tools)
+- [x] Cutout/Subtract Area: scissors button on area measurements, draw polygon to subtract (HVAC, skylight, etc.), renders as hatched red polygon with minus label
+- [x] Rectangle Area shortcut: Rect button in toolbar, click two opposite corners to define rectangle (no need to click all 4 corners)
+- [x] Dimension Line annotation: Dim button, click 2 points, scroll to set offset, click to save — renders with arrowheads and auto-calculated distance label
+- [x] Callout Bubble: Callout button, click anchor point, click to place label bubble — renders with leader arrow, saved to DB per tab
+- [x] All four tools: Escape to cancel, touch/tap support for iPad, 44px touch targets, cursor crosshair in all new modes
+- [x] Schema: cutouts, dimensionLines, callouts tables added with tabId support

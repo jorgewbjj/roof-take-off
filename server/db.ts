@@ -1,6 +1,6 @@
 import { eq, desc, and, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation, planTabs, InsertPlanTab } from "../drizzle/schema";
+import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation, planTabs, InsertPlanTab, cutouts, InsertCutout, dimensionLines, InsertDimensionLine, callouts, InsertCallout } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -368,4 +368,108 @@ export async function getAllProjectMeasurements(projectId: number) {
   return db.select().from(measurements)
     .where(eq(measurements.projectId, projectId))
     .orderBy(measurements.tabId, desc(measurements.createdAt));
+}
+
+// ─── Cutout queries ───────────────────────────────────────────────────────────
+
+export async function getTabCutouts(projectId: number, tabId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tabId === null) {
+    return db.select().from(cutouts)
+      .where(and(eq(cutouts.projectId, projectId), isNull(cutouts.tabId)))
+      .orderBy(cutouts.createdAt);
+  }
+  return db.select().from(cutouts)
+    .where(and(eq(cutouts.projectId, projectId), eq(cutouts.tabId, tabId)))
+    .orderBy(cutouts.createdAt);
+}
+
+export async function createCutout(cutout: InsertCutout) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(cutouts).values(cutout);
+  return result[0].insertId;
+}
+
+export async function deleteCutout(id: number, projectId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(cutouts).where(and(eq(cutouts.id, id), eq(cutouts.projectId, projectId)));
+}
+
+// ─── Dimension Line queries ───────────────────────────────────────────────────
+
+export async function getTabDimensionLines(projectId: number, tabId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tabId === null) {
+    return db.select().from(dimensionLines)
+      .where(and(eq(dimensionLines.projectId, projectId), isNull(dimensionLines.tabId)))
+      .orderBy(dimensionLines.createdAt);
+  }
+  return db.select().from(dimensionLines)
+    .where(and(eq(dimensionLines.projectId, projectId), eq(dimensionLines.tabId, tabId)))
+    .orderBy(dimensionLines.createdAt);
+}
+
+export async function createDimensionLine(dim: InsertDimensionLine) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(dimensionLines).values(dim);
+  return result[0].insertId;
+}
+
+export async function updateDimensionLine(
+  id: number,
+  projectId: number,
+  updates: Partial<Pick<InsertDimensionLine, 'x1' | 'y1' | 'x2' | 'y2' | 'offsetPx' | 'customLabel' | 'color'>>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(dimensionLines).set(updates).where(and(eq(dimensionLines.id, id), eq(dimensionLines.projectId, projectId)));
+}
+
+export async function deleteDimensionLine(id: number, projectId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(dimensionLines).where(and(eq(dimensionLines.id, id), eq(dimensionLines.projectId, projectId)));
+}
+
+// ─── Callout queries ──────────────────────────────────────────────────────────
+
+export async function getTabCallouts(projectId: number, tabId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  if (tabId === null) {
+    return db.select().from(callouts)
+      .where(and(eq(callouts.projectId, projectId), isNull(callouts.tabId)))
+      .orderBy(callouts.createdAt);
+  }
+  return db.select().from(callouts)
+    .where(and(eq(callouts.projectId, projectId), eq(callouts.tabId, tabId)))
+    .orderBy(callouts.createdAt);
+}
+
+export async function createCallout(callout: InsertCallout) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(callouts).values(callout);
+  return result[0].insertId;
+}
+
+export async function updateCallout(
+  id: number,
+  projectId: number,
+  updates: Partial<Pick<InsertCallout, 'anchorX' | 'anchorY' | 'bubbleX' | 'bubbleY' | 'bubbleW' | 'bubbleH' | 'text' | 'color' | 'textColor'>>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(callouts).set(updates).where(and(eq(callouts.id, id), eq(callouts.projectId, projectId)));
+}
+
+export async function deleteCallout(id: number, projectId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(callouts).where(and(eq(callouts.id, id), eq(callouts.projectId, projectId)));
 }

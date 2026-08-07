@@ -147,3 +147,83 @@ export const planTabs = mysqlTable("planTabs", {
 
 export type PlanTab = typeof planTabs.$inferSelect;
 export type InsertPlanTab = typeof planTabs.$inferInsert;
+
+/**
+ * Cutouts table — polygons that subtract area from a parent measurement.
+ * Net area = parent.area - SUM(cutouts.area) for the same parentMeasurementId.
+ * Coordinates are in baseScale pixel space (same as measurements).
+ */
+export const cutouts = mysqlTable("cutouts", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  /** The measurement whose area is being subtracted from */
+  parentMeasurementId: int("parentMeasurementId").notNull(),
+  /** Nullable: null = default/original project tab */
+  tabId: int("tabId"),
+  name: varchar("name", { length: 255 }).notNull().default("Cutout"),
+  area: decimal("area", { precision: 12, scale: 2 }).notNull(),
+  coordinates: json("coordinates").notNull(), // Array of {x, y} points
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Cutout = typeof cutouts.$inferSelect;
+export type InsertCutout = typeof cutouts.$inferInsert;
+
+/**
+ * Dimension Lines table — annotate a known distance between two points on the plan.
+ * Rendered as a line with arrowheads and an auto-calculated distance label.
+ * offsetPx: how far the dimension line is offset from the measured line (perpendicular), in baseScale pixels.
+ */
+export const dimensionLines = mysqlTable("dimensionLines", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  /** Nullable: null = default/original project tab */
+  tabId: int("tabId"),
+  /** Start point in baseScale pixel space */
+  x1: float("x1").notNull(),
+  y1: float("y1").notNull(),
+  /** End point in baseScale pixel space */
+  x2: float("x2").notNull(),
+  y2: float("y2").notNull(),
+  /** Perpendicular offset in baseScale pixels (positive = above the line) */
+  offsetPx: float("offsetPx").notNull().default(40),
+  /** Optional custom label override; null = auto-calculated distance */
+  customLabel: varchar("customLabel", { length: 100 }),
+  color: varchar("color", { length: 7 }).notNull().default("#1e40af"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DimensionLine = typeof dimensionLines.$inferSelect;
+export type InsertDimensionLine = typeof dimensionLines.$inferInsert;
+
+/**
+ * Callouts table — text bubble with a leader arrow pointing to a specific location.
+ * anchorX/Y: the tip of the leader arrow (points to the feature being labeled).
+ * bubbleX/Y: top-left corner of the text bubble.
+ */
+export const callouts = mysqlTable("callouts", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  /** Nullable: null = default/original project tab */
+  tabId: int("tabId"),
+  /** Anchor point (tip of leader arrow) in baseScale pixel space */
+  anchorX: float("anchorX").notNull(),
+  anchorY: float("anchorY").notNull(),
+  /** Bubble top-left corner in baseScale pixel space */
+  bubbleX: float("bubbleX").notNull(),
+  bubbleY: float("bubbleY").notNull(),
+  /** Bubble dimensions in baseScale pixels */
+  bubbleW: float("bubbleW").notNull().default(160),
+  bubbleH: float("bubbleH").notNull().default(60),
+  /** Text content */
+  text: varchar("text", { length: 500 }).notNull().default("Label"),
+  /** Bubble fill color */
+  color: varchar("color", { length: 7 }).notNull().default("#fef9c3"),
+  /** Text color */
+  textColor: varchar("textColor", { length: 7 }).notNull().default("#1e293b"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Callout = typeof callouts.$inferSelect;
+export type InsertCallout = typeof callouts.$inferInsert;
