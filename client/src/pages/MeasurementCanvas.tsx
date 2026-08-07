@@ -240,6 +240,7 @@ export default function MeasurementCanvas() {
   // ─── Cutout tool state ────────────────────────────────────────────────────────
   const [isCutoutMode, setIsCutoutMode] = useState(false);
   const [cutoutParentId, setCutoutParentId] = useState<number | null>(null);
+  const [showCutoutPickerDialog, setShowCutoutPickerDialog] = useState(false);
 
   // ─── Dimension Line tool state ────────────────────────────────────────────────
   const [isDimMode, setIsDimMode] = useState(false);
@@ -2849,6 +2850,23 @@ export default function MeasurementCanvas() {
               <span className="hidden sm:inline">{isCalloutMode ? "Stop Callout" : "Callout"}</span>
             </Button>
             <Button
+              variant={isCutoutMode ? "default" : "outline"}
+              size="sm"
+              onClick={() => {
+                if (isCutoutMode) {
+                  setIsCutoutMode(false); setCutoutParentId(null); setIsDrawing(false); setCurrentPolygon([]);
+                } else {
+                  // Open parent-picker dialog
+                  setShowCutoutPickerDialog(true);
+                }
+              }}
+              title="Cutout — subtract HVAC unit, skylight, penthouse from an area measurement"
+              className="min-w-[44px] min-h-[44px] md:min-h-0"
+            >
+              <Scissors className="w-4 h-4 mr-1" />
+              <span className="hidden sm:inline">{isCutoutMode ? "Stop Cutout" : "Cutout"}</span>
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={() => setShowCalibrationChooser(true)}
@@ -4287,6 +4305,53 @@ export default function MeasurementCanvas() {
             >
               Delete
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* ─── Cutout Parent Picker Dialog ─────────────────────────────────────── */}
+      <Dialog open={showCutoutPickerDialog} onOpenChange={setShowCutoutPickerDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Select Area to Cut From</DialogTitle>
+            <DialogDescription>
+              Choose which area measurement you want to subtract from. Then draw the cutout polygon on the canvas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2 max-h-64 overflow-y-auto">
+            {( measurements ?? []).filter(m => m.type === 'area').length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No area measurements found. Draw an area first.</p>
+            ) : (
+              ( measurements ?? []).filter(m => m.type === 'area').map(m => (
+                <button
+                  key={m.id}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left"
+                  onClick={() => {
+                    setCutoutParentId(m.id);
+                    setIsCutoutMode(true);
+                    setIsDrawing(true);
+                    setIsEditMode(false);
+                    setIsCountingMode(false);
+                    setIsTextMode(false);
+                    setIsRectMode(false);
+                    setIsDimMode(false);
+                    setIsCalloutMode(false);
+                    setCurrentPolygon([]);
+                    setShowCutoutPickerDialog(false);
+                    toast(`Drawing cutout for "${m.name}" — draw polygon, then press Escape to save`, { duration: 5000 });
+                  }}
+                >
+                  <div className="w-4 h-4 rounded flex-shrink-0" style={{ backgroundColor: m.color }} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{m.name}</div>
+                    <div className="text-xs text-muted-foreground">{m.area} {scaleUnit}²</div>
+                  </div>
+                  <Scissors className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                </button>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCutoutPickerDialog(false)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
