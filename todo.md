@@ -521,3 +521,8 @@
 - [x] Callout Bubble: Callout button, click anchor point, click to place label bubble — renders with leader arrow, saved to DB per tab
 - [x] All four tools: Escape to cancel, touch/tap support for iPad, 44px touch targets, cursor crosshair in all new modes
 - [x] Schema: cutouts, dimensionLines, callouts tables added with tabId support
+
+## Bug Fixes - Phase 12 (Cutout Visual Subtraction)
+- [x] Fix cutout: visually subtract cutout polygon from parent area using canvas destination-out composite
+- [x] Fix cutout: show net area (gross - cutouts) in sidebar measurement card
+- [x] Fix cutout: show net area label on canvas instead of just the hatched overlay

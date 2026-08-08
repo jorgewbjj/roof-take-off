@@ -1066,6 +1066,40 @@ export default function MeasurementCanvas() {
         ctx.fill();
         ctx.stroke();
 
+        // Punch cutout holes using destination-out composite operation
+        const myCutouts = cutoutsList.filter((c: Cutout) => c.parentMeasurementId === measurement.id);
+        if (myCutouts.length > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = 'destination-out';
+          myCutouts.forEach((cutout: Cutout) => {
+            const cc = (cutout.coordinates as Point[]).map((p: Point) => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
+            if (cc.length < 3) return;
+            ctx.beginPath();
+            ctx.moveTo(cc[0].x, cc[0].y);
+            cc.forEach((p: Point) => ctx.lineTo(p.x, p.y));
+            ctx.closePath();
+            ctx.fill();
+          });
+          ctx.restore();
+          // Re-draw the border on top (destination-out erased it)
+          ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
+          ctx.lineWidth = isSelected ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
+          scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
+          ctx.closePath();
+          ctx.stroke();
+          // Draw cutout borders so they are visible
+          myCutouts.forEach((cutout: Cutout) => {
+            const cc = (cutout.coordinates as Point[]).map((p: Point) => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
+            if (cc.length < 3) return;
+            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+            ctx.beginPath(); ctx.moveTo(cc[0].x, cc[0].y);
+            cc.forEach((p: Point) => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.stroke();
+            ctx.setLineDash([]);
+          });
+        }
+
         // Draw vertices for selected measurement
         if (isSelected) {
           scaledCoords.forEach((point, index) => {
@@ -1092,9 +1126,17 @@ export default function MeasurementCanvas() {
         ctx.fillStyle = measurement.color;
         ctx.fillText(measurement.name, centerX, centerY - 7);
         ctx.font = "9px sans-serif";
-        ctx.strokeText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 7);
+        // Show net area if cutouts exist, otherwise gross area
+        const myCutoutsForLabel = cutoutsList.filter((c: Cutout) => c.parentMeasurementId === measurement.id);
+        const cutoutTotal = myCutoutsForLabel.reduce((sum: number, c: Cutout) => sum + parseFloat(String(c.area)), 0);
+        const grossArea = parseFloat(String(measurement.area));
+        const netArea = Math.max(0, grossArea - cutoutTotal);
+        const areaLabel = myCutoutsForLabel.length > 0
+          ? `Net: ${netArea.toFixed(1)} ${scaleUnit}²`
+          : `${measurement.area} ${scaleUnit}²`;
+        ctx.strokeText(areaLabel, centerX, centerY + 7);
         ctx.fillStyle = "#fff";
-        ctx.fillText(`${measurement.area} ${scaleUnit}²`, centerX, centerY + 7);
+        ctx.fillText(areaLabel, centerX, centerY + 7);
       }
     });
 
@@ -1292,32 +1334,6 @@ export default function MeasurementCanvas() {
     });
 
     // Draw cutouts (hatched polygons with dashed red border)
-    cutoutsList.forEach((cutout: Cutout) => {
-      const coords = cutout.coordinates as Point[];
-      if (coords.length < 3) return;
-      const sc = coords.map((p: Point) => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
-      ctx.save();
-      ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
-      ctx.beginPath(); ctx.moveTo(sc[0].x, sc[0].y);
-      sc.forEach((p: Point) => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.stroke();
-      ctx.save(); ctx.clip();
-      ctx.strokeStyle = 'rgba(239,68,68,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([]);
-      const mnX = Math.min(...sc.map((p: Point) => p.x)); const mxX = Math.max(...sc.map((p: Point) => p.x));
-      const mnY = Math.min(...sc.map((p: Point) => p.y)); const mxY = Math.max(...sc.map((p: Point) => p.y));
-      for (let hx = mnX - (mxY - mnY); hx < mxX + (mxY - mnY); hx += 10) {
-        ctx.beginPath(); ctx.moveTo(hx, mnY); ctx.lineTo(hx + (mxY - mnY), mxY); ctx.stroke();
-      }
-      ctx.restore();
-      const ccx = sc.reduce((s: number, p: Point) => s + p.x, 0) / sc.length;
-      const ccy = sc.reduce((s: number, p: Point) => s + p.y, 0) / sc.length;
-      ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-      ctx.strokeText(`−${parseFloat(String(cutout.area)).toFixed(1)} ${scaleUnit}²`, ccx, ccy);
-      ctx.fillStyle = '#ef4444';
-      ctx.fillText(`−${parseFloat(String(cutout.area)).toFixed(1)} ${scaleUnit}²`, ccx, ccy);
-      ctx.restore();
-    });
-
     // Draw saved dimension lines
     dimensionLinesList.forEach((dim: DimensionLine) => {
       const dist = calculateDistance({ x: dim.x1, y: dim.y1 }, { x: dim.x2, y: dim.y2 });
@@ -3599,6 +3615,17 @@ export default function MeasurementCanvas() {
                                               {measurement.perimeter && (
                                                 <div className="text-[10px]">Perimeter: {measurement.perimeter} {scaleUnit}</div>
                                               )}
+                                              {(() => {
+                                                const myCuts = cutoutsList.filter((c: Cutout) => c.parentMeasurementId === measurement.id);
+                                                if (myCuts.length === 0) return null;
+                                                const cutTotal = myCuts.reduce((s: number, c: Cutout) => s + parseFloat(String(c.area)), 0);
+                                                const net = Math.max(0, parseFloat(String(measurement.area)) - cutTotal);
+                                                return (
+                                                  <div className="text-[10px] font-medium text-orange-500 mt-0.5">
+                                                    −{cutTotal.toFixed(1)} {scaleUnit}² cutouts → Net: {net.toFixed(1)} {scaleUnit}²
+                                                  </div>
+                                                );
+                                              })()}
                                             </>
                                           )}
                                         </div>
