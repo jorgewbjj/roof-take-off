@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import type { Cutout, DimensionLine, Callout } from "../../../drizzle/schema";
-import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Maximize2, Eye, EyeOff, FileText, ChevronRight, ChevronDown, Settings2, Type, X, Scissors, Square, Ruler, MessageSquare } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Edit2, Save, Download, ZoomIn, ZoomOut, RotateCcw, Maximize2, Eye, EyeOff, FileText, ChevronRight, ChevronLeft, ChevronDown, Settings2, Type, X, Scissors, Square, Ruler, MessageSquare, Pencil, Hash, MousePointer2, SlidersHorizontal } from "lucide-react";
 import CategoryManager from "@/components/CategoryManager";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -2794,14 +2794,15 @@ export default function MeasurementCanvas() {
           </div>
         </div>
 
-        {/* Bottom Row - Toolbar with all controls */}
-        <div className="px-3 md:px-6 py-2 flex items-center gap-3 md:gap-6 overflow-x-auto scrollbar-none">
-          {/* Drawing Tools */}
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Tools:</span>
+        {/* Toolbar — two rows on tablet/mobile, single scrollable row on desktop */}
+        {/* Row 1: Primary tools + Zoom + Page nav */}
+        <div className="px-2 md:px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none border-b border-border/50">
+          {/* Primary Drawing Tools */}
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               variant={isDrawing ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
                 setIsDrawing(!isDrawing);
                 setIsEditMode(false);
@@ -2809,60 +2810,62 @@ export default function MeasurementCanvas() {
                 setIsCountingMode(false);
                 if (isDrawing) setCurrentPolygon([]);
               }}
+              title="Draw polygon or line measurement"
             >
-              {isDrawing ? "Stop Drawing" : "Draw"}
+              <Pencil className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isDrawing ? "Stop" : "Draw"}</span>
             </Button>
             <Button
               variant={isCountingMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
-                if (isCountingMode) {
-                  // Stop counting
-                  setIsCountingMode(false);
-                  setIsDrawing(false);
-                } else {
-                  // Show category selection dialog
-                  setShowCountCategoryDialog(true);
-                }
+                if (isCountingMode) { setIsCountingMode(false); setIsDrawing(false); }
+                else setShowCountCategoryDialog(true);
               }}
+              title="Count items (point markers)"
             >
-              {isCountingMode ? "Stop Counting" : "Count"}
+              <Hash className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isCountingMode ? "Stop" : "Count"}</span>
             </Button>
             <Button
               variant={isEditMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
                 setIsEditMode(!isEditMode);
-                setIsDrawing(false);
-                setIsCountingMode(false);
-                setIsExactMode(false);
-                setIsTextMode(false);
-                setSelectedMeasurementId(null);
+                setIsDrawing(false); setIsCountingMode(false); setIsExactMode(false);
+                setIsTextMode(false); setSelectedMeasurementId(null);
               }}
+              title="Edit measurement vertices"
             >
-              {isEditMode ? "Stop Edit" : "Edit"}
+              <MousePointer2 className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isEditMode ? "Stop" : "Edit"}</span>
             </Button>
+          </div>
+
+          <Separator orientation="vertical" className="h-6 shrink-0" />
+
+          {/* Annotation Tools */}
+          <div className="flex items-center gap-1 shrink-0">
             <Button
               variant={isTextMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
                 const next = !isTextMode;
                 setIsTextMode(next);
-                if (next) {
-                  setIsDrawing(false);
-                  setIsEditMode(false);
-                  setIsCountingMode(false);
-                  setCurrentPolygon([]);
-                }
+                if (next) { setIsDrawing(false); setIsEditMode(false); setIsCountingMode(false); setCurrentPolygon([]); }
               }}
               title="Add text box annotation"
             >
-              <Type className="w-4 h-4 mr-1" />
-              {isTextMode ? "Stop Text" : "Text"}
+              <Type className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isTextMode ? "Stop" : "Text"}</span>
             </Button>
             <Button
               variant={isRectMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
                 const next = !isRectMode;
                 setIsRectMode(next);
@@ -2873,14 +2876,14 @@ export default function MeasurementCanvas() {
                 } else { setRectFirstPoint(null); }
               }}
               title="Rectangle area — click two opposite corners"
-              className="min-w-[44px] min-h-[44px] md:min-h-0"
             >
-              <Square className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isRectMode ? "Stop Rect" : "Rect"}</span>
+              <Square className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isRectMode ? "Stop" : "Rect"}</span>
             </Button>
             <Button
               variant={isDimMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
                 const next = !isDimMode;
                 setIsDimMode(next);
@@ -2890,15 +2893,15 @@ export default function MeasurementCanvas() {
                   setCurrentPolygon([]); setDimStep(0); setDimPoint1(null); setDimPoint2(null);
                 } else { setDimStep(0); setDimPoint1(null); setDimPoint2(null); }
               }}
-              title="Dimension line — click 2 points, scroll to set offset, click to save"
-              className="min-w-[44px] min-h-[44px] md:min-h-0"
+              title="Dimension line — click 2 points, scroll to set offset"
             >
-              <Ruler className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isDimMode ? "Stop Dim" : "Dim"}</span>
+              <Ruler className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isDimMode ? "Stop" : "Dim"}</span>
             </Button>
             <Button
               variant={isCalloutMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
                 const next = !isCalloutMode;
                 setIsCalloutMode(next);
@@ -2908,95 +2911,93 @@ export default function MeasurementCanvas() {
                   setCurrentPolygon([]); setCalloutStep(0); setCalloutAnchor(null);
                 } else { setCalloutStep(0); setCalloutAnchor(null); }
               }}
-              title="Callout bubble — click anchor point, then click to place label"
-              className="min-w-[44px] min-h-[44px] md:min-h-0"
+              title="Callout bubble — click anchor, then place label"
             >
-              <MessageSquare className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isCalloutMode ? "Stop Callout" : "Callout"}</span>
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isCalloutMode ? "Stop" : "Note"}</span>
             </Button>
             <Button
               variant={isCutoutMode ? "default" : "outline"}
               size="sm"
+              className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
-                if (isCutoutMode) {
-                  setIsCutoutMode(false); setCutoutParentId(null); setIsDrawing(false); setCurrentPolygon([]);
-                } else {
-                  // Open parent-picker dialog
-                  setShowCutoutPickerDialog(true);
-                }
+                if (isCutoutMode) { setIsCutoutMode(false); setCutoutParentId(null); setIsDrawing(false); setCurrentPolygon([]); }
+                else setShowCutoutPickerDialog(true);
               }}
-              title="Cutout — subtract HVAC unit, skylight, penthouse from an area measurement"
-              className="min-w-[44px] min-h-[44px] md:min-h-0"
+              title="Cutout — subtract HVAC unit, skylight, penthouse from an area"
             >
-              <Scissors className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">{isCutoutMode ? "Stop Cutout" : "Cutout"}</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCalibrationChooser(true)}
-            >
-              Calibrate
+              <Scissors className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">{isCutoutMode ? "Stop" : "Cutout"}</span>
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="h-6 shrink-0" />
 
           {/* Zoom Controls */}
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Zoom:</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleZoomOut}
-              disabled={zoomLevel <= 0.1}
-            >
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleZoomOut} disabled={zoomLevel <= 0.1} title="Zoom out">
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <span className="text-sm font-mono w-12 text-center">{(zoomLevel * 100).toFixed(0)}%</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleZoomIn}
-              disabled={zoomLevel >= 3.0}
-            >
+            <span className="text-xs font-mono w-10 text-center shrink-0">{(zoomLevel * 100).toFixed(0)}%</span>
+            <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleZoomIn} disabled={zoomLevel >= 3.0} title="Zoom in">
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleZoomReset}
-              title="Reset zoom (100%)"
-            >
+            <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleZoomReset} title="Reset zoom (100%)">
               <RotateCcw className="w-4 h-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleFitToScreen()}
-              title="Fit to screen (F)"
-            >
+            <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={() => handleFitToScreen()} title="Fit to screen (F)">
               <Maximize2 className="w-4 h-4" />
             </Button>
           </div>
 
-          <Separator orientation="vertical" className="h-6" />
+          <Separator orientation="vertical" className="h-6 shrink-0" />
 
-          {/* Scale Settings */}
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Scale:</span>
+          {/* Calibrate */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 px-2.5 shrink-0 gap-1.5"
+            onClick={() => setShowCalibrationChooser(true)}
+            title="Set drawing scale"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span className="hidden sm:inline text-xs">Calibrate</span>
+          </Button>
+
+          {/* Page Navigation (always visible, compact) */}
+          {(pdfDoc?.numPages ?? 1) > 1 && (
+            <>
+              <Separator orientation="vertical" className="h-6 shrink-0" />
+              <div className="flex items-center gap-1 shrink-0">
+                <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage <= 1}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="text-xs font-mono w-12 text-center shrink-0">{currentPage}/{pdfDoc?.numPages ?? 1}</span>
+                <Button variant="outline" size="sm" className="h-9 w-9 p-0 shrink-0" onClick={() => setCurrentPage(p => Math.min(pdfDoc?.numPages ?? 1, p + 1))} disabled={currentPage >= (pdfDoc?.numPages ?? 1)}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Row 2: Scale + Category + Color + Exact (only shown when drawing or scale is relevant) */}
+        <div className="px-2 md:px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          {/* Scale Settings — always visible */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Scale:</span>
             <Input
               type="number"
               value={scale}
               onChange={(e) => setScale(parseFloat(e.target.value) || 1.0)}
-              className="w-20 h-8"
+              className="w-16 h-8 text-xs shrink-0"
               step="0.1"
             />
             <Select value={scaleUnit} onValueChange={(val) => {
               setScaleUnit(val);
               updateProjectMutation.mutate({ id: projectId, scaleUnit: val });
             }}>
-              <SelectTrigger className="w-20 h-8">
+              <SelectTrigger className="w-16 h-8 text-xs shrink-0">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -3004,92 +3005,92 @@ export default function MeasurementCanvas() {
                 <SelectItem value="m">m</SelectItem>
               </SelectContent>
             </Select>
-            <span className="hidden sm:inline text-sm text-muted-foreground">per inch</span>
+            <span className="hidden md:inline text-xs text-muted-foreground shrink-0">per inch</span>
           </div>
 
-          <Separator orientation="vertical" className="h-6" />
-
-          {/* Category Selector */}
-          {isDrawing && (
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Category:</span>
-              <Select
-                value={isCustomCategory ? "Other" : selectedCategory}
-                onValueChange={(value) => {
-                  if (value === "Other") {
-                    setIsCustomCategory(true);
-                    setSelectedCategory("");
-                    setMeasurementName("");
-                  } else {
-                    setIsCustomCategory(false);
-                    setSelectedCategory(value);
-                    setMeasurementName(value);
-                    // Auto-switch drawing mode based on category measurementType
-                    const customCat = customCategories.find(c => c.name === value);
-                    if (customCat && customCat.measurementType === 'count') {
-                      // Switch to count mode for count-type custom categories
-                      setIsDrawing(false);
-                      setCurrentPolygon([]);
-                      setShowCountCategoryDialog(true);
-                    }
-                  }
-                }}
-              >
-                <SelectTrigger className="w-44 h-8">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {/* Built-in preset categories */}
-                  {PRESET_CATEGORIES.filter(c => c !== 'Other').map((category) => (
-                    <SelectItem key={category} value={category}>
-                      {category}
-                    </SelectItem>
-                  ))}
-                  {/* User's saved custom categories — shared across all projects */}
-                  {customCategories.length > 0 && (
-                    <>
-                      <div className="px-2 py-1 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">My Categories</div>
-                      {customCategories.map((category) => (
-                        <SelectItem key={category.id} value={category.name}>
-                          {category.name}
-                        </SelectItem>
-                      ))}
-                    </>
-                  )}
-                  <SelectItem value="Other">Other (Create New)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Color Picker */}
-          {isDrawing && (
-            <div className="flex items-center gap-2">
-              <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Color:</span>
-              <div className="flex gap-1">
-                {PRESET_COLORS.slice(0, 5).map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => setSelectedColor(color)}
-                    className={`w-6 h-6 rounded border-2 transition-all ${
-                      selectedColor === color ? "border-foreground scale-110" : "border-border"
-                    }`}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Exact Mode Toggle */}
+          {/* Category + Color + Exact — only when drawing */}
           {isDrawing && (
             <>
-              <Separator orientation="vertical" className="h-6" />
-              <div className="flex items-center gap-2">
-                <span className="hidden sm:inline text-sm font-medium text-muted-foreground">Exact:</span>
+              <Separator orientation="vertical" className="h-6 shrink-0" />
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="hidden sm:inline text-xs font-medium text-muted-foreground shrink-0">Category:</span>
+                <Select
+                  value={isCustomCategory ? "__custom__" : selectedCategory}
+                  onValueChange={(val) => {
+                    if (val === "__custom__") {
+                      setIsCustomCategory(true);
+                      setMeasurementName("");
+                    } else {
+                      setIsCustomCategory(false);
+                      setSelectedCategory(val);
+                      setMeasurementName(val);
+                      // Auto-switch mode based on category type
+                      const customCat = customCategories?.find((c: { name: string }) => c.name === val);
+                      if (customCat && customCat.measurementType) {
+                        if (customCat.measurementType === 'count') {
+                          setIsCountingMode(true); setIsDrawing(false);
+                        } else {
+                          setIsCountingMode(false); setIsDrawing(true);
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-32 h-8 text-xs shrink-0">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRESET_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                    {customCategories && customCategories.length > 0 && (
+                      <>
+                        <div className="px-2 py-1 text-xs text-muted-foreground font-medium">Custom</div>
+                        {customCategories.map((cat: { id: number; name: string }) => (
+                          <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                        ))}
+                      </>
+                    )}
+                    <SelectItem value="__custom__">+ Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                {isCustomCategory && (
+                  <Input
+                    placeholder="Category name"
+                    value={measurementName}
+                    onChange={(e) => setMeasurementName(e.target.value)}
+                    className="w-28 h-8 text-xs shrink-0"
+                  />
+                )}
+              </div>
+
+              <Separator orientation="vertical" className="h-6 shrink-0" />
+
+              {/* Color Selector */}
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="hidden sm:inline text-xs font-medium text-muted-foreground shrink-0">Color:</span>
+                <div className="flex gap-1 shrink-0">
+                  {["#ef4444","#f97316","#eab308","#22c55e","#3b82f6","#8b5cf6","#ec4899","#14b8a6"].map((color) => (
+                    <button
+                      key={color}
+                      className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 shrink-0 ${selectedColor === color ? "border-foreground scale-110" : "border-transparent"}`}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setSelectedColor(color)}
+                      title={color}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <Separator orientation="vertical" className="h-6 shrink-0" />
+
+              {/* Exact Mode */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className="hidden sm:inline text-xs font-medium text-muted-foreground shrink-0">Exact:</span>
                 <Button
                   variant={isExactMode ? "default" : "outline"}
                   size="sm"
+                  className="h-8 px-2 text-xs shrink-0"
                   onClick={() => setIsExactMode(!isExactMode)}
                 >
                   {isExactMode ? "On" : "Off"}
@@ -3100,7 +3101,7 @@ export default function MeasurementCanvas() {
                     placeholder="Distance"
                     value={exactDistance}
                     onChange={(e) => setExactDistance(e.target.value)}
-                    className="w-24 h-8"
+                    className="w-20 h-8 text-xs shrink-0"
                   />
                 )}
               </div>
@@ -3108,6 +3109,7 @@ export default function MeasurementCanvas() {
           )}
         </div>
       </header>
+
 
       {/* Plan Tab Bar */}
       <div className="flex items-center gap-0 border-b border-border bg-muted/40 px-2 overflow-x-auto shrink-0" style={{ minHeight: '38px' }}>
