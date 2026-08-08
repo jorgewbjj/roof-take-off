@@ -678,7 +678,9 @@ export default function MeasurementCanvas() {
         if (isRectMode) { setIsRectMode(false); setRectFirstPoint(null); toast('Rectangle cancelled'); return; }
         if (isDimMode) { setIsDimMode(false); setDimStep(0); setDimPoint1(null); setDimPoint2(null); toast('Dimension cancelled'); return; }
         if (isCalloutMode) { setIsCalloutMode(false); setCalloutStep(0); setCalloutAnchor(null); toast('Callout cancelled'); return; }
-        if (isCutoutMode) { setIsCutoutMode(false); setCutoutParentId(null); setIsDrawing(false); setCurrentPolygon([]); toast('Cutout cancelled'); return; }
+        // In cutout mode with 0 points: cancel. With 2+ points: save (fall through to name dialog below)
+        if (isCutoutMode && currentPolygon.length < 2) { setIsCutoutMode(false); setCutoutParentId(null); setIsDrawing(false); setCurrentPolygon([]); toast('Cutout cancelled'); return; }
+        // If isCutoutMode with 2+ points, fall through to the name dialog open below
         
         // Stop counting mode
         if (isCountingMode) {
@@ -1054,34 +1056,43 @@ export default function MeasurementCanvas() {
         ctx.fillStyle = measurement.color;
         ctx.fillText(`${measurement.area} ${scaleUnit}`, centerX, centerY);
       } else {
-        // Draw area measurement (polygon)
-        ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
-        ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
-        ctx.lineWidth = isSelected ? 4 : 2;
-
-        ctx.beginPath();
-        ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
-        scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-
-        // Punch cutout holes using destination-out composite operation
+        // Draw area measurement (polygon), with cutout holes punched via offscreen canvas
         const myCutouts = cutoutsList.filter((c: Cutout) => c.parentMeasurementId === measurement.id);
+
         if (myCutouts.length > 0) {
-          ctx.save();
-          ctx.globalCompositeOperation = 'destination-out';
+          // Use an offscreen canvas so destination-out only affects this shape, not other measurements
+          const overlayCanvas = overlayCanvasRef.current!;
+          const offscreen = document.createElement('canvas');
+          offscreen.width = overlayCanvas.width;
+          offscreen.height = overlayCanvas.height;
+          const offCtx = offscreen.getContext('2d')!;
+
+          // 1. Draw the filled area on the offscreen canvas
+          offCtx.fillStyle = measurement.color + (isSelected ? "60" : "40");
+          offCtx.beginPath();
+          offCtx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
+          scaledCoords.forEach((point) => offCtx.lineTo(point.x, point.y));
+          offCtx.closePath();
+          offCtx.fill();
+
+          // 2. Punch holes for each cutout using destination-out
+          offCtx.globalCompositeOperation = 'destination-out';
+          offCtx.globalAlpha = 1;
           myCutouts.forEach((cutout: Cutout) => {
             const cc = (cutout.coordinates as Point[]).map((p: Point) => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
             if (cc.length < 3) return;
-            ctx.beginPath();
-            ctx.moveTo(cc[0].x, cc[0].y);
-            cc.forEach((p: Point) => ctx.lineTo(p.x, p.y));
-            ctx.closePath();
-            ctx.fill();
+            offCtx.beginPath();
+            offCtx.moveTo(cc[0].x, cc[0].y);
+            cc.forEach((p: Point) => offCtx.lineTo(p.x, p.y));
+            offCtx.closePath();
+            offCtx.fill();
           });
-          ctx.restore();
-          // Re-draw the border on top (destination-out erased it)
+          offCtx.globalCompositeOperation = 'source-over';
+
+          // 3. Composite the offscreen canvas onto the main overlay
+          ctx.drawImage(offscreen, 0, 0);
+
+          // 4. Draw the outer border
           ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
           ctx.lineWidth = isSelected ? 4 : 2;
           ctx.beginPath();
@@ -1089,7 +1100,8 @@ export default function MeasurementCanvas() {
           scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
           ctx.closePath();
           ctx.stroke();
-          // Draw cutout borders so they are visible
+
+          // 5. Draw cutout borders (red dashed) so they are visible
           myCutouts.forEach((cutout: Cutout) => {
             const cc = (cutout.coordinates as Point[]).map((p: Point) => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
             if (cc.length < 3) return;
@@ -1098,6 +1110,17 @@ export default function MeasurementCanvas() {
             cc.forEach((p: Point) => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.stroke();
             ctx.setLineDash([]);
           });
+        } else {
+          // No cutouts — draw normally
+          ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
+          ctx.strokeStyle = isSelected ? "#22c55e" : measurement.color;
+          ctx.lineWidth = isSelected ? 4 : 2;
+          ctx.beginPath();
+          ctx.moveTo(scaledCoords[0].x, scaledCoords[0].y);
+          scaledCoords.forEach((point) => ctx.lineTo(point.x, point.y));
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
         }
 
         // Draw vertices for selected measurement
