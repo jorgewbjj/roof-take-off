@@ -1110,6 +1110,32 @@ export default function MeasurementCanvas() {
             cc.forEach((p: Point) => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.stroke();
             ctx.setLineDash([]);
           });
+
+          // 6. Draw area label on each cutout (name + area, centered at centroid)
+          myCutouts.forEach((cutout: Cutout) => {
+            const cc = (cutout.coordinates as Point[]).map((p: Point) => ({ x: p.x * zoomLevel, y: p.y * zoomLevel }));
+            if (cc.length < 3) return;
+            const cx = cc.reduce((s, p) => s + p.x, 0) / cc.length;
+            const cy = cc.reduce((s, p) => s + p.y, 0) / cc.length;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.lineJoin = 'round';
+            // Name label
+            ctx.font = 'bold 10px sans-serif';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+            ctx.strokeText(cutout.name, cx, cy - 7);
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText(cutout.name, cx, cy - 7);
+            // Area label
+            ctx.font = '9px sans-serif';
+            const cutoutArea = parseFloat(String(cutout.area));
+            const cutoutAreaLabel = `−${cutoutArea.toFixed(1)} ${scaleUnit}²`;
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+            ctx.strokeText(cutoutAreaLabel, cx, cy + 7);
+            ctx.fillStyle = '#ef4444';
+            ctx.fillText(cutoutAreaLabel, cx, cy + 7);
+          });
         } else {
           // No cutouts — draw normally
           ctx.fillStyle = measurement.color + (isSelected ? "60" : "40");
