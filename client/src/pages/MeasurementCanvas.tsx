@@ -3635,8 +3635,8 @@ export default function MeasurementCanvas() {
                                 // Wall measurements have perimeter set (linear ft) but are NOT area measurements
                                 const isLine = !isPoint && !isWallCategory && (measurement.perimeter === null || measurement.perimeter === undefined);
                                 return (
+                                  <div key={measurement.id} className="contents">
                                   <div
-                                    key={measurement.id}
                                     className="flex items-center justify-between p-2.5 hover:bg-accent/50 transition-colors"
                                   >
                                     <div className="flex items-center gap-2.5 flex-1">
@@ -3741,6 +3741,45 @@ export default function MeasurementCanvas() {
                                         </Button>
                                       )}
                                     </div>
+                                  </div>
+                                  {/* Cutout sub-rows — shown for area measurements that have cutouts */}
+                                  {measurement.type === 'area' && (() => {
+                                    const myCuts = cutoutsList.filter((c: Cutout) => c.parentMeasurementId === measurement.id);
+                                    if (myCuts.length === 0) return null;
+                                    return (
+                                      <div className="border-t border-dashed border-border/60 bg-muted/30">
+                                        {myCuts.map((cutout: Cutout) => (
+                                          <div
+                                            key={cutout.id}
+                                            className="flex items-center justify-between px-3 py-1.5 hover:bg-accent/40 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                              <div className="w-3 h-3 shrink-0 flex items-center justify-center">
+                                                <div className="w-2 h-2 rounded-sm border-2 border-red-400 bg-transparent" />
+                                              </div>
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-medium text-foreground truncate">{cutout.name}</p>
+                                                <p className="text-[10px] text-red-500">−{parseFloat(String(cutout.area)).toFixed(1)} {scaleUnit}²</p>
+                                              </div>
+                                            </div>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 w-6 p-0 shrink-0"
+                                              title="Delete this cutout"
+                                              onClick={() => {
+                                                if (confirm(`Delete cutout "${cutout.name}"?`)) {
+                                                  deleteCutoutMutation.mutate({ id: cutout.id, projectId });
+                                                }
+                                              }}
+                                            >
+                                              <Trash2 className="w-3 h-3 text-destructive" />
+                                            </Button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
                                   </div>
                                 );
                               })
