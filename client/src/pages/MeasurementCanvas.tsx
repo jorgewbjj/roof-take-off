@@ -3008,6 +3008,58 @@ export default function MeasurementCanvas() {
             <span className="hidden md:inline text-xs text-muted-foreground shrink-0">per inch</span>
           </div>
 
+          {/* Text annotation controls — only when a text box is selected */}
+          {selectedTextId !== null && !isDrawing && (() => {
+            const selAnn = textAnnotationsList.find(a => a.id === selectedTextId);
+            if (!selAnn) return null;
+            return (
+              <>
+                <Separator orientation="vertical" className="h-6 shrink-0" />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="hidden sm:inline text-xs font-medium text-muted-foreground shrink-0">Font:</span>
+                  <Select
+                    value={String(selAnn.fontSize)}
+                    onValueChange={(val) => {
+                      updateTextAnnotationMutation.mutate({ id: selAnn.id, projectId, fontSize: parseInt(val) });
+                    }}
+                  >
+                    <SelectTrigger className="w-16 h-8 text-xs shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48].map(sz => (
+                        <SelectItem key={sz} value={String(sz)}>{sz}px</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <input
+                    type="color"
+                    value={selAnn.textColor}
+                    onChange={(e) => updateTextAnnotationMutation.mutate({ id: selAnn.id, projectId, textColor: e.target.value })}
+                    className="w-8 h-8 rounded border border-border cursor-pointer shrink-0"
+                    title="Text color"
+                  />
+                  <input
+                    type="color"
+                    value={selAnn.bgColor === 'transparent' ? '#ffffff' : selAnn.bgColor}
+                    onChange={(e) => updateTextAnnotationMutation.mutate({ id: selAnn.id, projectId, bgColor: e.target.value })}
+                    className="w-8 h-8 rounded border border-border cursor-pointer shrink-0"
+                    title="Background color"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 shrink-0 text-xs"
+                    onClick={() => updateTextAnnotationMutation.mutate({ id: selAnn.id, projectId, bgColor: 'transparent' })}
+                    title="Transparent background"
+                  >
+                    None
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+
           {/* Category + Color + Exact — only when drawing */}
           {isDrawing && (
             <>
@@ -3413,7 +3465,7 @@ export default function MeasurementCanvas() {
               className="absolute top-0 left-0 gpu-layer"
               style={{ 
                 pointerEvents: "auto",
-                cursor: isPanning ? "grabbing" : (isDrawing ? "none" : "grab"),
+                cursor: isPanning ? "grabbing" : (isDrawing ? "none" : (isTextMode || selectedTextId !== null ? "default" : "grab")),
                 touchAction: "none",  // prevent browser handling touch (scroll/zoom)
               }}
             />
