@@ -34,4 +34,11 @@ describe("callout labels", () => {
     expect(result).toEqual({ success: true });
     expect(db.updateCallout).toHaveBeenCalledWith(7, 42, expect.objectContaining({ bubbleX: 360, bubbleY: 220, anchorX: 148, anchorY: 91 }));
   });
+
+  it("deletes a callout label from its authorized project", async () => {
+    vi.mocked(db.deleteCallout).mockResolvedValue(undefined);
+    const result = await appRouter.createCaller(makeContext()).callouts.delete({ id: 7, projectId: 42 });
+    expect(result).toEqual({ success: true });
+    expect(db.deleteCallout).toHaveBeenCalledWith(7, 42);
+  });
 });

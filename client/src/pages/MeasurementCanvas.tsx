@@ -755,6 +755,18 @@ export default function MeasurementCanvas() {
         }
       }
 
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedCalloutId !== null) {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+          e.preventDefault();
+          if (confirm('Delete this label?')) {
+            deleteCalloutMutation.mutate({ id: selectedCalloutId, projectId });
+            toast.success('Label deleted');
+          }
+          return;
+        }
+      }
+
       // F key to fit canvas to screen
       if (e.key === 'f' || e.key === 'F') {
         // Only trigger if not typing in an input/textarea
@@ -783,7 +795,7 @@ export default function MeasurementCanvas() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, isCountingMode, handleFitToScreen, deleteMeasurementMutation]);
+  }, [isDrawing, currentPolygon, isEditMode, selectedMeasurementId, selectedCalloutId, isCountingMode, handleFitToScreen, deleteMeasurementMutation, deleteCalloutMutation, projectId]);
 
   // Prevent page scrolling with mouse wheel except in sidebar
   useEffect(() => {
@@ -3524,6 +3536,26 @@ export default function MeasurementCanvas() {
                 />
               </div>;
             })()}
+            {selectedCalloutId !== null && editingCalloutId === null && (() => {
+              const callout = renderedCallouts.find(item => item.id === selectedCalloutId);
+              if (!callout) return null;
+              return <button
+                type="button"
+                aria-label="Delete selected label"
+                title="Delete label"
+                onPointerDown={event => event.stopPropagation()}
+                onClick={event => {
+                  event.stopPropagation();
+                  if (confirm('Delete this label?')) {
+                    deleteCalloutMutation.mutate({ id: callout.id, projectId });
+                    toast.success('Label deleted');
+                  }
+                }}
+                style={{ position: 'absolute', left: callout.bubbleX * zoomLevel + callout.bubbleW * zoomLevel - 22, top: callout.bubbleY * zoomLevel - 22, zIndex: 102, width: 44, height: 44, borderRadius: 9999, border: '2px solid #ffffff', background: '#dc2626', color: '#ffffff', fontSize: 24, fontWeight: 700, lineHeight: 1, boxShadow: '0 2px 8px rgba(0,0,0,0.25)', cursor: 'pointer', touchAction: 'manipulation' }}
+              >
+                ×
+              </button>;
+            })()}
             <canvas
               ref={overlayCanvasRef}
               onClick={(e) => {
@@ -3550,12 +3582,12 @@ export default function MeasurementCanvas() {
                 if (draggingCalloutId !== null && draggingCalloutPart && calloutDragStart) {
                   const dx = (x - calloutDragStart.mouseX) / zoomLevel;
                   const dy = (y - calloutDragStart.mouseY) / zoomLevel;
-                  setCalloutDrafts(previous => ({
-                    ...previous,
-                    [draggingCalloutId]: draggingCalloutPart === 'bubble'
-                      ? { ...previous[draggingCalloutId], bubbleX: calloutDragStart.origX + dx, bubbleY: calloutDragStart.origY + dy }
-                      : { ...previous[draggingCalloutId], anchorX: calloutDragStart.origX + dx, anchorY: calloutDragStart.origY + dy },
-                  }));
+                  updateCalloutDraft(
+                    draggingCalloutId,
+                    draggingCalloutPart === 'bubble'
+                      ? { bubbleX: calloutDragStart.origX + dx, bubbleY: calloutDragStart.origY + dy }
+                      : { anchorX: calloutDragStart.origX + dx, anchorY: calloutDragStart.origY + dy },
+                  );
                   return;
                 }
 
