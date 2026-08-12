@@ -200,7 +200,10 @@ export default function MeasurementCanvas() {
   const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
   const [calibrationDistance, setCalibrationDistance] = useState("");
   const [isCountingMode, setIsCountingMode] = useState(false);
+  const isCountingModeRef = useRef(false);
+  const [pendingCountMarkers, setPendingCountMarkers] = useState<Array<{ id: string; point: Point; color: string }>>([]);
   const [showCountCategoryDialog, setShowCountCategoryDialog] = useState(false);
+  useEffect(() => { isCountingModeRef.current = isCountingMode; }, [isCountingMode]);
   const [isCalibrationDialogOpen, setIsCalibrationDialogOpen] = useState(false);
   // Scale notation calibration state
   const [showCalibrationChooser, setShowCalibrationChooser] = useState(false);
@@ -464,11 +467,14 @@ export default function MeasurementCanvas() {
       }
       utils.measurements.list.invalidate({ projectId, tabId: activeTabId !== undefined ? activeTabId : null });
       utils.measurements.listAll.invalidate({ projectId });
-      toast.success("Measurement saved — Ctrl+Z to undo");
       setCurrentPolygon([]);
-      setMeasurementName("");
       setIsShapeClosed(false);
-      setIsDrawing(false); // Exit drawing mode so the saved measurement is visible immediately
+      // A point-count session remains open until the estimator explicitly stops it.
+      // This prevents an async save from cancelling rapid consecutive marker clicks.
+      if (isCountingModeRef.current) return;
+      toast.success("Measurement saved — Ctrl+Z to undo");
+      setMeasurementName("");
+      setIsDrawing(false); // Exit normal drawing mode so the saved measurement is visible immediately
       // redrawOverlay is intentionally NOT called here — the useEffect watching `measurements`
       // fires automatically once the invalidate refetch completes with the fresh data.
     },
@@ -730,6 +736,7 @@ export default function MeasurementCanvas() {
         
         // Stop counting mode
         if (isCountingMode) {
+          isCountingModeRef.current = false;
           setIsCountingMode(false);
           setIsDrawing(false);
           setCurrentPolygon([]);
@@ -1303,6 +1310,28 @@ export default function MeasurementCanvas() {
       }
     });
 
+    // Render newly clicked count markers immediately while their independent saves run.
+    // Saved measurements replace these temporary markers after the query refreshes.
+    pendingCountMarkers.forEach(marker => {
+      const point = { x: marker.point.x * zoomLevel, y: marker.point.y * zoomLevel };
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = `${marker.color}60`;
+      ctx.fill();
+      ctx.strokeStyle = marker.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      const offset = 4;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(point.x - offset, point.y - offset);
+      ctx.lineTo(point.x + offset, point.y + offset);
+      ctx.moveTo(point.x + offset, point.y - offset);
+      ctx.lineTo(point.x - offset, point.y + offset);
+      ctx.stroke();
+    });
+
     // Draw current polygon with AutoCAD-style lines and measurements
     if (currentPolygon.length > 0) {
       // Scale current polygon points with zoom level
@@ -1737,7 +1766,7 @@ export default function MeasurementCanvas() {
   // isDrawing and isCountingMode are included so entering/exiting drawing mode triggers a redraw immediately
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage, isDrawing, isCountingMode, cutoutsList, dimensionLinesList, calloutsList, calloutDrafts, selectedCalloutId, isDimMode, dimPoint1, dimPoint2, dimStep, dimOffsetPx, dimColor, isCalloutMode, calloutStep, calloutAnchor, isRectMode, rectFirstPoint, isCutoutMode]);
+  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage, isDrawing, isCountingMode, pendingCountMarkers, cutoutsList, dimensionLinesList, calloutsList, calloutDrafts, selectedCalloutId, isDimMode, dimPoint1, dimPoint2, dimStep, dimOffsetPx, dimColor, isCalloutMode, calloutStep, calloutAnchor, isRectMode, rectFirstPoint, isCutoutMode]);
 
   // Cursor-move redraws — only when actively drawing/counting (cheap path)
   // isDrawing/isCountingMode/isCalibrating included so the condition re-evaluates when modes change
@@ -2184,7 +2213,7 @@ export default function MeasurementCanvas() {
       return;
     }
 
-    if (!isDrawing) return;
+    if (!isDrawing && !isCountingMode) return;
 
     // Point counting mode: ONLY use isCountingMode state (set exclusively by Count button)
     // Draw button should always draw shapes/lines, never count
@@ -2194,8 +2223,11 @@ export default function MeasurementCanvas() {
       const normalizedY = y / zoomLevel;
       const point = { x: normalizedX, y: normalizedY };
       
-      // Immediately save this point as a measurement
+      // Draw immediately in local state, then persist in the background. This avoids
+      // a visible delay when an estimator taps a dense group of commercial roof items.
       const categoryName = selectedCategory || measurementName;
+      const pendingMarkerId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+      setPendingCountMarkers(previous => [...previous, { id: pendingMarkerId, point, color: selectedColor }]);
       createMeasurementMutation.mutate({
         projectId,
         tabId: activeTabId,
@@ -2206,9 +2238,13 @@ export default function MeasurementCanvas() {
         perimeter: undefined,
         count: 1,
         coordinates: [point],
+      }, {
+        onSuccess: () => setPendingCountMarkers(previous => previous.filter(marker => marker.id !== pendingMarkerId)),
+        onError: () => {
+          setPendingCountMarkers(previous => previous.filter(marker => marker.id !== pendingMarkerId));
+          toast.error(`Could not add ${categoryName} marker`);
+        },
       });
-      
-      toast.success(`Added ${categoryName} marker`);
       return;
     }
 
@@ -2976,13 +3012,13 @@ export default function MeasurementCanvas() {
               size="sm"
               className="h-9 px-2.5 shrink-0 gap-1.5"
               onClick={() => {
-                if (isCountingMode) { setIsCountingMode(false); setIsDrawing(false); }
+                if (isCountingMode) { isCountingModeRef.current = false; setIsCountingMode(false); setIsDrawing(false); }
                 else setShowCountCategoryDialog(true);
               }}
-              title="Count items (point markers)"
+              title={isCountingMode ? "Stop counting and keep all placed markers" : "Count items (point markers)"}
             >
               <Hash className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs">{isCountingMode ? "Stop" : "Count"}</span>
+              <span className="hidden sm:inline text-xs">{isCountingMode ? "Stop Count" : "Count"}</span>
             </Button>
             <Button
               variant={isEditMode ? "default" : "outline"}
@@ -4344,6 +4380,7 @@ export default function MeasurementCanvas() {
               }
               
               setShowCountCategoryDialog(false);
+              isCountingModeRef.current = true;
               setIsCountingMode(true);
               setIsDrawing(true); // Enable drawing mode for point counting
               setIsEditMode(false);

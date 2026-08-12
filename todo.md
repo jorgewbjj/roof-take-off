@@ -548,3 +548,8 @@
 - [x] Add a visible resize handle for callout label bubbles, with desktop and iPad touch support
 - [ ] Verify label resize, desktop drag, and iPad touch interactions work together without conflicting with canvas pan or drawing modes
 - [x] Add a clear, touch-friendly delete control and keyboard shortcut for selected callout labels
+
+## Bug Fixes - Phase 15 (Continuous Counting)
+- [x] Fix counting mode so every tap/click adds another marker during a single active counting session
+- [x] Add a clear Stop Counting action that commits the accumulated total only when the user finishes
+- [x] Keep counting responsive during rapid consecutive clicks and support desktop and iPad touch input
