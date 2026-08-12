@@ -78,6 +78,20 @@
       "when": 1786140576499,
       "tag": "0010_oval_raza",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1786487460748,
+      "tag": "0011_nice_black_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1786492869928,
+      "tag": "0012_hard_photon",
+      "breakpoints": true
     }
   ]
 }

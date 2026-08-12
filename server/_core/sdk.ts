@@ -6,6 +6,7 @@ import type { Request } from "express";
 import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import * as db from "../db";
+import { hashOpaqueToken, readCustomerSessionToken } from "../customerAuth";
 import { ENV } from "./env";
 import type {
   ExchangeTokenRequest,
@@ -257,7 +258,18 @@ class SDKServer {
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    // Regular authentication flow
+    // Branded customer authentication: opaque sessions are preferred over the legacy Manus session.
+    const customerToken = readCustomerSessionToken(req);
+    if (customerToken) {
+      const customerSession = await db.getAuthSessionUser(hashOpaqueToken(customerToken));
+      if (customerSession) {
+        await db.touchAuthSession(customerSession.sessionId);
+        await db.markUserSignedIn(customerSession.user.id);
+        return customerSession.user;
+      }
+    }
+
+    // Temporary legacy owner path. This remains only to preserve owner access until an owner password is set.
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
     const session = await this.verifySession(sessionCookie);

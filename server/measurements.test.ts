@@ -22,6 +22,7 @@ function createAuthContext(): TrpcContext {
 
   const ctx: TrpcContext = {
     user,
+    activeOrganization: { membershipId: 1, organizationId: 1, organizationName: "Test Workspace", organizationSlug: "test-workspace", role: "owner" },
     req: {
       protocol: "https",
       headers: {},

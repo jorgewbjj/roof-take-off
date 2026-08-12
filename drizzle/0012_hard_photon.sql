@@ -1,0 +1,1 @@
+ALTER TABLE `billingWebhookEvents` DROP COLUMN `payload`;

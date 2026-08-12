@@ -526,3 +526,18 @@
 - [x] Fix cutout: visually subtract cutout polygon from parent area using canvas destination-out composite
 - [x] Fix cutout: show net area (gross - cutouts) in sidebar measurement card
 - [x] Fix cutout: show net area label on canvas instead of just the hatched overlay
+
+## SaaS Transformation - Phase 13 (Multi-Tenant Subscription Platform)
+- [x] Complete Tier 3 impact assessment, migration plan, security review, and rollback plan for authentication, billing, and data ownership changes
+- [x] Add organization, membership, subscription plan, subscription, trial, invitation, and auth-session data models; migrate the owner and preserve all existing projects
+- [x] Implement branded customer email/password signup, sign-in, logout, secure password hashing, rate limiting, opaque session handling, and preserved owner access without Manus login requirements
+- [ ] Configure SMTP and enable customer password-reset, invitation, and welcome-email delivery after sender credentials are provided
+- [x] Scope all project, measurement, annotation, category, PDF storage, and export access to the active organization with owner/admin/estimator/viewer authorization
+- [x] Add master-owner subscription-plan administration, including configurable plan pricing, limits, and Stripe price mapping
+- [ ] Add master-owner organization oversight, seat management, and teammate invitations after SMTP delivery is configured
+- [x] Implement Stripe Checkout, 14-day no-card trial, customer billing portal, signature-verified webhook handling, idempotent event tracking, and server-enforced project limits
+- [ ] Claim the Stripe test sandbox and create the first paid plan from Platform Administration before accepting test subscriptions
+- [x] Build public pricing, branded sign-up, automatic workspace onboarding, workspace switching, subscription management, and account navigation screens
+- [ ] Enable teammate invitation UI after SMTP delivery is configured
+- [x] Add credential-auth, workspace-category authorization, trial-entitlement, migration-preservation, and full regression test coverage; verify legacy projects remain accessible to the owner
+- [x] Remove SaaS test data and prepare the final checkpoint; document production secrets and Stripe configuration steps

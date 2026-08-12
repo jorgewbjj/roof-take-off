@@ -1,6 +1,7 @@
-import { eq, desc, and, isNull } from "drizzle-orm";
+import { eq, desc, and, gt, isNull, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation, planTabs, InsertPlanTab, cutouts, InsertCutout, dimensionLines, InsertDimensionLine, callouts, InsertCallout } from "../drizzle/schema";
+import { authSessions, billingWebhookEvents, organizationMembers, organizations, organizationSubscriptions, passwordResetTokens, subscriptionPlans } from "../drizzle/saas-schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,6 +90,412 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+/** Case-normalized customer lookup used by credential auth. */
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+/** Create a customer account. Password hashes are prepared by the auth service, never in a router. */
+export async function createCustomerUser(input: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  mustChangePassword?: boolean;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(users).values({
+    email: input.email,
+    name: input.name,
+    passwordHash: input.passwordHash,
+    mustChangePassword: input.mustChangePassword ?? false,
+    isActive: true,
+    loginMethod: "password",
+    lastSignedIn: new Date(),
+  });
+  return result[0].insertId;
+}
+
+/**
+ * Creates the complete self-serve customer workspace atomically. If any insert fails,
+ * no partial user, organization, membership, or trial subscription remains.
+ */
+export async function createCustomerWorkspace(input: {
+  email: string;
+  name: string;
+  passwordHash: string;
+  organizationName: string;
+  organizationSlug: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const trialPlans = await tx.select().from(subscriptionPlans)
+      .where(and(eq(subscriptionPlans.code, "trial"), eq(subscriptionPlans.isActive, true)))
+      .limit(1);
+    if (!trialPlans.length) throw new Error("The default trial plan is not configured");
+
+    const userResult = await tx.insert(users).values({
+      email: input.email,
+      name: input.name,
+      passwordHash: input.passwordHash,
+      isActive: true,
+      loginMethod: "password",
+      lastSignedIn: new Date(),
+    });
+    const userId = Number(userResult[0].insertId);
+    const organizationResult = await tx.insert(organizations).values({
+      name: input.organizationName,
+      slug: input.organizationSlug,
+      status: "active",
+    });
+    const organizationId = Number(organizationResult[0].insertId);
+    await tx.insert(organizationMembers).values({ organizationId, userId, role: "owner" });
+    const trialEndsAt = new Date(Date.now() + trialPlans[0].trialDays * 24 * 60 * 60 * 1000);
+    await tx.insert(organizationSubscriptions).values({
+      organizationId,
+      planId: trialPlans[0].id,
+      status: "trialing",
+      provider: "stripe",
+      trialEndsAt,
+      currentPeriodStart: new Date(),
+    });
+    return { userId, organizationId, trialEndsAt };
+  });
+}
+
+export async function updateUserPassword(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ passwordHash, mustChangePassword: false, loginMethod: "password", updatedAt: new Date() })
+    .where(eq(users.id, userId));
+}
+
+export async function markUserSignedIn(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(users).set({ lastSignedIn: new Date() }).where(eq(users.id, userId));
+}
+
+export async function createAuthSession(userId: number, tokenHash: string, expiresAt: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(authSessions).values({ userId, tokenHash, expiresAt });
+  return result[0].insertId;
+}
+
+/** Resolve only active, unexpired credential sessions and their active user. */
+export async function getAuthSessionUser(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select({ sessionId: authSessions.id, user: users })
+    .from(authSessions)
+    .innerJoin(users, eq(authSessions.userId, users.id))
+    .where(and(
+      eq(authSessions.tokenHash, tokenHash),
+      isNull(authSessions.revokedAt),
+      gt(authSessions.expiresAt, new Date()),
+      eq(users.isActive, true),
+    ))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function touchAuthSession(sessionId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(authSessions).set({ lastUsedAt: new Date() }).where(eq(authSessions.id, sessionId));
+}
+
+export async function revokeAuthSession(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(authSessions).set({ revokedAt: new Date() })
+    .where(and(eq(authSessions.tokenHash, tokenHash), isNull(authSessions.revokedAt)));
+}
+
+export async function revokeAllAuthSessionsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(authSessions).set({ revokedAt: new Date() })
+    .where(and(eq(authSessions.userId, userId), isNull(authSessions.revokedAt)));
+}
+
+export async function createPasswordResetToken(userId: number, tokenHash: string, expiresAt: Date) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(passwordResetTokens).where(and(eq(passwordResetTokens.userId, userId), isNull(passwordResetTokens.usedAt)));
+  const result = await db.insert(passwordResetTokens).values({ userId, tokenHash, expiresAt });
+  return result[0].insertId;
+}
+
+/** Atomically consume a valid reset token. Only the winner of concurrent requests receives a user ID. */
+export async function consumePasswordResetToken(tokenHash: string): Promise<number | undefined> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const token = await db.select().from(passwordResetTokens)
+    .where(and(eq(passwordResetTokens.tokenHash, tokenHash), isNull(passwordResetTokens.usedAt), gt(passwordResetTokens.expiresAt, new Date())))
+    .limit(1);
+  if (!token.length) return undefined;
+  const result = await db.update(passwordResetTokens).set({ usedAt: new Date() })
+    .where(and(eq(passwordResetTokens.id, token[0].id), isNull(passwordResetTokens.usedAt)));
+  const affectedRows = Number((result[0] as { affectedRows?: number } | undefined)?.affectedRows ?? 0);
+  return affectedRows === 1 ? token[0].userId : undefined;
+}
+
+export type OrganizationRole = "owner" | "admin" | "estimator" | "viewer";
+
+export type OrganizationMembership = {
+  membershipId: number;
+  organizationId: number;
+  organizationName: string;
+  organizationSlug: string;
+  role: OrganizationRole;
+};
+
+export async function getOrganizationMembership(userId: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select({
+    membershipId: organizationMembers.id,
+    organizationId: organizations.id,
+    organizationName: organizations.name,
+    organizationSlug: organizations.slug,
+    role: organizationMembers.role,
+  })
+    .from(organizationMembers)
+    .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
+    .where(and(
+      eq(organizationMembers.userId, userId),
+      eq(organizationMembers.organizationId, organizationId),
+      eq(organizations.status, "active"),
+    ))
+    .limit(1);
+  return rows.length ? rows[0] : undefined;
+}
+
+export async function getDefaultOrganizationMembership(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select({
+    membershipId: organizationMembers.id,
+    organizationId: organizations.id,
+    organizationName: organizations.name,
+    organizationSlug: organizations.slug,
+    role: organizationMembers.role,
+  })
+    .from(organizationMembers)
+    .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
+    .where(and(eq(organizationMembers.userId, userId), eq(organizations.status, "active")))
+    .orderBy(organizationMembers.createdAt)
+    .limit(1);
+  return rows.length ? rows[0] : undefined;
+}
+
+export async function listUserOrganizations(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    membershipId: organizationMembers.id,
+    organizationId: organizations.id,
+    organizationName: organizations.name,
+    organizationSlug: organizations.slug,
+    role: organizationMembers.role,
+  })
+    .from(organizationMembers)
+    .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
+    .where(and(eq(organizationMembers.userId, userId), eq(organizations.status, "active")))
+    .orderBy(organizations.name);
+}
+
+export async function getOrganizationProjects(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(projects).where(eq(projects.organizationId, organizationId)).orderBy(desc(projects.updatedAt));
+}
+
+export async function getProjectByOrganizationId(projectId: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(projects)
+    .where(and(eq(projects.id, projectId), eq(projects.organizationId, organizationId)))
+    .limit(1);
+  return result.length ? result[0] : undefined;
+}
+
+export async function updateProjectInOrganization(projectId: number, organizationId: number, updates: Partial<InsertProject>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(projects).set(updates)
+    .where(and(eq(projects.id, projectId), eq(projects.organizationId, organizationId)));
+}
+
+export async function deleteProjectInOrganization(projectId: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const project = await getProjectByOrganizationId(projectId, organizationId);
+  if (!project) throw new Error("Project not found or access denied");
+  await db.delete(measurements).where(eq(measurements.projectId, projectId));
+  await db.delete(textAnnotations).where(eq(textAnnotations.projectId, projectId));
+  await db.delete(cutouts).where(eq(cutouts.projectId, projectId));
+  await db.delete(dimensionLines).where(eq(dimensionLines.projectId, projectId));
+  await db.delete(callouts).where(eq(callouts.projectId, projectId));
+  await db.delete(planTabs).where(eq(planTabs.projectId, projectId));
+  await db.delete(projects).where(and(eq(projects.id, projectId), eq(projects.organizationId, organizationId)));
+}
+
+export async function updateMeasurementIfInOrganization(measurementId: number, organizationId: number, updates: Partial<InsertMeasurement>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const measurement = await db.select({ id: measurements.id })
+    .from(measurements)
+    .innerJoin(projects, eq(measurements.projectId, projects.id))
+    .where(and(eq(measurements.id, measurementId), eq(projects.organizationId, organizationId)))
+    .limit(1);
+  if (!measurement.length) throw new Error("Measurement not found or access denied");
+  await db.update(measurements).set(updates).where(eq(measurements.id, measurementId));
+}
+
+export async function deleteMeasurementIfInOrganization(measurementId: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const measurement = await db.select({ id: measurements.id })
+    .from(measurements)
+    .innerJoin(projects, eq(measurements.projectId, projects.id))
+    .where(and(eq(measurements.id, measurementId), eq(projects.organizationId, organizationId)))
+    .limit(1);
+  if (!measurement.length) throw new Error("Measurement not found or access denied");
+  await db.delete(measurements).where(eq(measurements.id, measurementId));
+}
+
+export async function getOrganizationCountingCategories(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(countingCategories)
+    .where(eq(countingCategories.organizationId, organizationId))
+    .orderBy(desc(countingCategories.createdAt));
+}
+
+export async function updateCountingCategoryInOrganization(
+  id: number,
+  organizationId: number,
+  updates: { name?: string; measurementType?: "area" | "linear" | "count" },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(countingCategories).set(updates)
+    .where(and(eq(countingCategories.id, id), eq(countingCategories.organizationId, organizationId)));
+}
+
+export async function deleteCountingCategoryInOrganization(id: number, organizationId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(countingCategories)
+    .where(and(eq(countingCategories.id, id), eq(countingCategories.organizationId, organizationId)));
+}
+
+export async function getSubscriptionPlanById(planId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const plans = await db.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, planId)).limit(1);
+  return plans.length ? plans[0] : undefined;
+}
+
+export async function listPublicSubscriptionPlans() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(subscriptionPlans)
+    .where(and(eq(subscriptionPlans.isActive, true), eq(subscriptionPlans.isSystemPlan, false)))
+    .orderBy(subscriptionPlans.priceCents, subscriptionPlans.name);
+}
+
+export async function listAllSubscriptionPlans() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(subscriptionPlans).orderBy(subscriptionPlans.isSystemPlan, subscriptionPlans.priceCents, subscriptionPlans.name);
+}
+
+export async function createSubscriptionPlan(input: typeof subscriptionPlans.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(subscriptionPlans).values(input);
+  return Number(result[0].insertId);
+}
+
+export async function updateSubscriptionPlan(planId: number, updates: Partial<typeof subscriptionPlans.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(subscriptionPlans).set(updates).where(eq(subscriptionPlans.id, planId));
+}
+
+export async function getActiveSubscriptionPlanByStripePriceId(stripePriceId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const plans = await db.select().from(subscriptionPlans)
+    .where(and(eq(subscriptionPlans.stripePriceId, stripePriceId), eq(subscriptionPlans.isActive, true)))
+    .limit(1);
+  return plans.length ? plans[0] : undefined;
+}
+
+export async function getOrganizationSubscription(organizationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const subscriptions = await db.select({ subscription: organizationSubscriptions, plan: subscriptionPlans })
+    .from(organizationSubscriptions)
+    .innerJoin(subscriptionPlans, eq(organizationSubscriptions.planId, subscriptionPlans.id))
+    .where(eq(organizationSubscriptions.organizationId, organizationId))
+    .limit(1);
+  return subscriptions.length ? subscriptions[0] : undefined;
+}
+
+export async function getOrganizationUsage(organizationId: number) {
+  const db = await getDb();
+  if (!db) return { projectCount: 0, seatCount: 0 };
+  const [projectRows, seatRows] = await Promise.all([
+    db.select({ id: projects.id }).from(projects).where(eq(projects.organizationId, organizationId)),
+    db.select({ id: organizationMembers.id }).from(organizationMembers).where(eq(organizationMembers.organizationId, organizationId)),
+  ]);
+  return { projectCount: projectRows.length, seatCount: seatRows.length };
+}
+
+export async function updateOrganizationSubscriptionByOrganization(
+  organizationId: number,
+  updates: Partial<Pick<typeof organizationSubscriptions.$inferInsert,
+    "planId" | "status" | "provider" | "stripeCustomerId" | "stripeSubscriptionId" | "trialEndsAt" | "currentPeriodStart" | "currentPeriodEnd" | "cancelAtPeriodEnd" | "canceledAt"
+  >>,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(organizationSubscriptions).set(updates)
+    .where(eq(organizationSubscriptions.organizationId, organizationId));
+}
+
+export async function getOrganizationSubscriptionByStripeCustomerId(stripeCustomerId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const subscriptions = await db.select().from(organizationSubscriptions)
+    .where(eq(organizationSubscriptions.stripeCustomerId, stripeCustomerId))
+    .limit(1);
+  return subscriptions.length ? subscriptions[0] : undefined;
+}
+
+/** Returns false for a duplicate provider event, enabling safe webhook retries. */
+export async function recordBillingWebhookEvent(provider: string, providerEventId: string, eventType: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    await db.insert(billingWebhookEvents).values({ provider, providerEventId, eventType, processedAt: new Date() });
+    return true;
+  } catch (error) {
+    const message = String(error);
+    if (message.includes("Duplicate") || message.includes("duplicate") || message.includes("1062")) return false;
+    throw error;
+  }
+}
+
 // Project queries
 export async function getUserProjects(userId: number) {
   const db = await getDb();
@@ -101,11 +508,15 @@ export async function getProjectById(projectId: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
   
-  const result = await db.select().from(projects).where(
-    and(eq(projects.id, projectId), eq(projects.userId, userId))
-  ).limit(1);
+  const result = await db.select({ project: projects }).from(projects)
+    .leftJoin(organizationMembers, eq(projects.organizationId, organizationMembers.organizationId))
+    .where(and(
+      eq(projects.id, projectId),
+      or(eq(projects.userId, userId), eq(organizationMembers.userId, userId)),
+    ))
+    .limit(1);
   
-  return result.length > 0 ? result[0] : undefined;
+  return result.length > 0 ? result[0].project : undefined;
 }
 
 export async function createProject(project: InsertProject) {
@@ -119,23 +530,22 @@ export async function createProject(project: InsertProject) {
 export async function updateProject(projectId: number, userId: number, updates: Partial<InsertProject>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
-  await db.update(projects).set(updates).where(
-    and(eq(projects.id, projectId), eq(projects.userId, userId))
-  );
+  const project = await getProjectById(projectId, userId);
+  if (!project) throw new Error("Project not found or access denied");
+  await db.update(projects).set(updates).where(eq(projects.id, projectId));
 }
 
 export async function deleteProject(projectId: number, userId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const project = await getProjectById(projectId, userId);
+  if (!project) throw new Error("Project not found or access denied");
   
   // Delete all measurements first
   await db.delete(measurements).where(eq(measurements.projectId, projectId));
   
   // Delete the project
-  await db.delete(projects).where(
-    and(eq(projects.id, projectId), eq(projects.userId, userId))
-  );
+  await db.delete(projects).where(eq(projects.id, projectId));
 }
 
 // Measurement queries
@@ -167,13 +577,14 @@ export async function updateMeasurementIfOwned(measurementId: number, userId: nu
   if (!db) throw new Error("Database not available");
 
   // Join with projects to verify ownership
-  const result = await db.select({ projectUserId: projects.userId })
+  const result = await db.select({ projectUserId: projects.userId, memberUserId: organizationMembers.userId })
     .from(measurements)
     .innerJoin(projects, eq(measurements.projectId, projects.id))
+    .leftJoin(organizationMembers, eq(projects.organizationId, organizationMembers.organizationId))
     .where(eq(measurements.id, measurementId))
     .limit(1);
 
-  if (!result.length || result[0].projectUserId !== userId) {
+  if (!result.length || (result[0].projectUserId !== userId && result[0].memberUserId !== userId)) {
     throw new Error('Measurement not found or access denied');
   }
 
@@ -193,13 +604,14 @@ export async function deleteMeasurementIfOwned(measurementId: number, userId: nu
   if (!db) throw new Error("Database not available");
 
   // Join with projects to verify ownership
-  const result = await db.select({ projectUserId: projects.userId })
+  const result = await db.select({ projectUserId: projects.userId, memberUserId: organizationMembers.userId })
     .from(measurements)
     .innerJoin(projects, eq(measurements.projectId, projects.id))
+    .leftJoin(organizationMembers, eq(projects.organizationId, organizationMembers.organizationId))
     .where(eq(measurements.id, measurementId))
     .limit(1);
 
-  if (!result.length || result[0].projectUserId !== userId) {
+  if (!result.length || (result[0].projectUserId !== userId && result[0].memberUserId !== userId)) {
     throw new Error('Measurement not found or access denied');
   }
 
@@ -293,11 +705,15 @@ export async function getProjectPlanTabs(projectId: number) {
 export async function getPlanTabById(tabId: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  // Join with projects to verify ownership
+  // Permit the direct project owner or a member of the project organization.
   const result = await db.select({ tab: planTabs })
     .from(planTabs)
     .innerJoin(projects, eq(planTabs.projectId, projects.id))
-    .where(and(eq(planTabs.id, tabId), eq(projects.userId, userId)))
+    .leftJoin(organizationMembers, eq(projects.organizationId, organizationMembers.organizationId))
+    .where(and(
+      eq(planTabs.id, tabId),
+      or(eq(projects.userId, userId), eq(organizationMembers.userId, userId)),
+    ))
     .limit(1);
   return result.length > 0 ? result[0].tab : undefined;
 }

@@ -1,8 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { getLoginUrl } from "@/const";
 import { Ruler, Upload, Palette, Save, ArrowRight, AlertCircle } from "lucide-react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useEffect, useMemo } from "react";
 
 export default function Home() {
@@ -42,9 +41,7 @@ export default function Home() {
             <Ruler className="w-6 h-6 text-primary" />
             <span className="text-xl font-semibold text-foreground">Roof Plan Measurer</span>
           </div>
-          <Button asChild>
-            <a href={getLoginUrl()}>Sign In</a>
-          </Button>
+          <div className="flex items-center gap-2"><Link href="/pricing" className="hidden text-sm font-medium text-muted-foreground hover:text-foreground sm:inline">Pricing</Link><Link href="/login"><Button variant="outline">Sign in</Button></Link><Link href="/signup"><Button>Start free trial</Button></Link></div>
         </div>
       </header>
 
@@ -56,9 +53,7 @@ export default function Home() {
             <p className="text-sm text-destructive">
               Sign-in failed — the login session may have expired. Please try signing in again.
             </p>
-            <Button size="sm" variant="outline" asChild className="ml-auto flex-shrink-0">
-              <a href={getLoginUrl()}>Try Again</a>
-            </Button>
+            <Link href="/login" className="ml-auto flex-shrink-0"><Button size="sm" variant="outline">Try Again</Button></Link>
           </div>
         </div>
       )}
@@ -76,12 +71,9 @@ export default function Home() {
             Save your projects in the cloud and access them anytime, anywhere.
           </p>
 
-          <div className="flex items-center justify-center gap-4 pt-4">
-            <Button size="lg" asChild className="gap-2">
-              <a href={getLoginUrl()}>
-                Get Started <ArrowRight className="w-4 h-4" />
-              </a>
-            </Button>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+            <Link href="/signup"><Button size="lg" className="gap-2">Start 14-day free trial <ArrowRight className="w-4 h-4" /></Button></Link>
+            <Link href="/pricing"><Button size="lg" variant="outline">View pricing</Button></Link>
           </div>
         </div>
 

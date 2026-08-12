@@ -5,6 +5,11 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Signup from "./pages/Signup";
+import Pricing from "./pages/Pricing";
+import Billing from "./pages/Billing";
+import PlatformAdmin from "./pages/PlatformAdmin";
 import Projects from "./pages/Projects";
 import MeasurementCanvas from "./pages/MeasurementCanvas";
 
@@ -12,6 +17,11 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/login"} component={Login} />
+      <Route path={"/signup"} component={Signup} />
+      <Route path={"/pricing"} component={Pricing} />
+      <Route path={"/billing"} component={Billing} />
+      <Route path={"/platform-admin"} component={PlatformAdmin} />
       <Route path={"/projects"} component={Projects} />
       <Route path={"/project/:id"} component={MeasurementCanvas} />
       <Route path={"/404"} component={NotFound} />
