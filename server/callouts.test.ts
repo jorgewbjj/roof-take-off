@@ -35,6 +35,12 @@ describe("callout labels", () => {
     expect(db.updateCallout).toHaveBeenCalledWith(7, 42, expect.objectContaining({ bubbleX: 360, bubbleY: 220, anchorX: 148, anchorY: 91 }));
   });
 
+  it("persists resized label-bubble dimensions", async () => {
+    const result = await appRouter.createCaller(makeContext()).callouts.update({ id: 7, projectId: 42, bubbleW: 280, bubbleH: 124 });
+    expect(result).toEqual({ success: true });
+    expect(db.updateCallout).toHaveBeenCalledWith(7, 42, expect.objectContaining({ bubbleW: 280, bubbleH: 124 }));
+  });
+
   it("deletes a callout label from its authorized project", async () => {
     vi.mocked(db.deleteCallout).mockResolvedValue(undefined);
     const result = await appRouter.createCaller(makeContext()).callouts.delete({ id: 7, projectId: 42 });

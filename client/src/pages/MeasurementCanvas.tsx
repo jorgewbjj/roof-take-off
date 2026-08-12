@@ -260,8 +260,8 @@ export default function MeasurementCanvas() {
   const calloutDraftsRef = useRef<Record<number, Partial<Pick<Callout, 'anchorX' | 'anchorY' | 'bubbleX' | 'bubbleY' | 'bubbleW' | 'bubbleH'>>>>({});
   const renderedCalloutsRef = useRef<Callout[]>([]);
   const lastCalloutTapRef = useRef<{ id: number; at: number } | null>(null);
-  const calloutTouchDragRef = useRef<{ id: number; part: 'bubble' | 'anchor'; startX: number; startY: number; origX: number; origY: number } | null>(null);
-  const [draggingCalloutPart, setDraggingCalloutPart] = useState<'bubble' | 'anchor' | null>(null);
+  const calloutTouchDragRef = useRef<{ id: number; part: 'bubble' | 'anchor' | 'resize'; startX: number; startY: number; origX: number; origY: number } | null>(null);
+  const [draggingCalloutPart, setDraggingCalloutPart] = useState<'bubble' | 'anchor' | 'resize' | null>(null);
   const [draggingCalloutId, setDraggingCalloutId] = useState<number | null>(null);
   const [calloutDragStart, setCalloutDragStart] = useState<{ mouseX: number; mouseY: number; origX: number; origY: number } | null>(null);
   const [editingCalloutId, setEditingCalloutId] = useState<number | null>(null);
@@ -279,6 +279,8 @@ export default function MeasurementCanvas() {
     const y = canvasY / zoomLevelRef.current;
     const anchorRadius = Math.max(8, 12 / zoomLevelRef.current);
     for (const callout of [...renderedCalloutsRef.current].reverse()) {
+      const resizeRadius = Math.max(10, 14 / zoomLevelRef.current);
+      if (Math.abs(x - (callout.bubbleX + callout.bubbleW)) <= resizeRadius && Math.abs(y - (callout.bubbleY + callout.bubbleH)) <= resizeRadius) return { callout, part: 'resize' as const };
       if (Math.hypot(x - callout.anchorX, y - callout.anchorY) <= anchorRadius) return { callout, part: 'anchor' as const };
       if (x >= callout.bubbleX && x <= callout.bubbleX + callout.bubbleW && y >= callout.bubbleY && y <= callout.bubbleY + callout.bubbleH) return { callout, part: 'bubble' as const };
     }
@@ -437,6 +439,8 @@ export default function MeasurementCanvas() {
     const y = canvasY / zoomLevel;
     const anchorRadius = Math.max(8, 12 / zoomLevel);
     for (const callout of [...renderedCallouts].reverse()) {
+      const resizeRadius = Math.max(10, 14 / zoomLevel);
+      if (Math.abs(x - (callout.bubbleX + callout.bubbleW)) <= resizeRadius && Math.abs(y - (callout.bubbleY + callout.bubbleH)) <= resizeRadius) return { callout, part: 'resize' as const };
       if (Math.hypot(x - callout.anchorX, y - callout.anchorY) <= anchorRadius) return { callout, part: 'anchor' as const };
       const inBubble = x >= callout.bubbleX && x <= callout.bubbleX + callout.bubbleW && y >= callout.bubbleY && y <= callout.bubbleY + callout.bubbleH;
       if (inBubble) return { callout, part: 'bubble' as const };
@@ -860,8 +864,8 @@ export default function MeasurementCanvas() {
           part: calloutHit.part,
           startX: touch.clientX,
           startY: touch.clientY,
-          origX: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleX : calloutHit.callout.anchorX,
-          origY: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleY : calloutHit.callout.anchorY,
+          origX: calloutHit.part === 'resize' ? calloutHit.callout.bubbleW : calloutHit.part === 'bubble' ? calloutHit.callout.bubbleX : calloutHit.callout.anchorX,
+          origY: calloutHit.part === 'resize' ? calloutHit.callout.bubbleH : calloutHit.part === 'bubble' ? calloutHit.callout.bubbleY : calloutHit.callout.anchorY,
         };
         touchStartRef.current = { x: touch.clientX, y: touch.clientY };
         setIsPanning(false);
@@ -931,7 +935,9 @@ export default function MeasurementCanvas() {
         const dy = (touch.clientY - calloutDrag.startY) / zoomLevelRef.current;
         updateCalloutDraft(calloutDrag.id, calloutDrag.part === 'bubble'
           ? { bubbleX: calloutDrag.origX + dx, bubbleY: calloutDrag.origY + dy }
-          : { anchorX: calloutDrag.origX + dx, anchorY: calloutDrag.origY + dy });
+          : calloutDrag.part === 'resize'
+            ? { bubbleW: Math.max(80, calloutDrag.origX + dx), bubbleH: Math.max(44, calloutDrag.origY + dy) }
+            : { anchorX: calloutDrag.origX + dx, anchorY: calloutDrag.origY + dy });
         return;
       }
 
@@ -1867,8 +1873,8 @@ export default function MeasurementCanvas() {
         setCalloutDragStart({
           mouseX: x,
           mouseY: y,
-          origX: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleX : calloutHit.callout.anchorX,
-          origY: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleY : calloutHit.callout.anchorY,
+          origX: calloutHit.part === 'resize' ? calloutHit.callout.bubbleW : calloutHit.part === 'bubble' ? calloutHit.callout.bubbleX : calloutHit.callout.anchorX,
+          origY: calloutHit.part === 'resize' ? calloutHit.callout.bubbleH : calloutHit.part === 'bubble' ? calloutHit.callout.bubbleY : calloutHit.callout.anchorY,
         });
         return;
       }
@@ -3586,7 +3592,9 @@ export default function MeasurementCanvas() {
                     draggingCalloutId,
                     draggingCalloutPart === 'bubble'
                       ? { bubbleX: calloutDragStart.origX + dx, bubbleY: calloutDragStart.origY + dy }
-                      : { anchorX: calloutDragStart.origX + dx, anchorY: calloutDragStart.origY + dy },
+                      : draggingCalloutPart === 'resize'
+                        ? { bubbleW: Math.max(80, calloutDragStart.origX + dx), bubbleH: Math.max(44, calloutDragStart.origY + dy) }
+                        : { anchorX: calloutDragStart.origX + dx, anchorY: calloutDragStart.origY + dy },
                   );
                   return;
                 }

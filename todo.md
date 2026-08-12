@@ -545,5 +545,6 @@
 ## Bug Fixes - Phase 14 (Label Editing and Positioning)
 - [x] Fix label text entry/editing so users can type into a newly created or existing label reliably
 - [x] Fix label drag-to-reposition so users can place labels anywhere on the canvas and persist the new position
+- [x] Add a visible resize handle for callout label bubbles, with desktop and iPad touch support
 - [ ] Verify label resize, desktop drag, and iPad touch interactions work together without conflicting with canvas pan or drawing modes
 - [x] Add a clear, touch-friendly delete control and keyboard shortcut for selected callout labels
