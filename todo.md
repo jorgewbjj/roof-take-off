@@ -541,3 +541,8 @@
 - [x] Add teammate invitation UI with pending-delivery status; SMTP delivery activation remains tracked separately
 - [x] Add credential-auth, workspace-category authorization, trial-entitlement, migration-preservation, and full regression test coverage; verify legacy projects remain accessible to the owner
 - [x] Remove SaaS test data and prepare the final checkpoint; document production secrets and Stripe configuration steps
+
+## Bug Fixes - Phase 14 (Label Editing and Positioning)
+- [x] Fix label text entry/editing so users can type into a newly created or existing label reliably
+- [x] Fix label drag-to-reposition so users can place labels anywhere on the canvas and persist the new position
+- [ ] Verify label resize, desktop drag, and iPad touch interactions work together without conflicting with canvas pan or drawing modes

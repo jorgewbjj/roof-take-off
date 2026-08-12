@@ -256,10 +256,34 @@ export default function MeasurementCanvas() {
   const [calloutStep, setCalloutStep] = useState<0 | 1>(0);
   const [calloutAnchor, setCalloutAnchor] = useState<Point | null>(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState<number | null>(null);
+  const [calloutDrafts, setCalloutDrafts] = useState<Record<number, Partial<Pick<Callout, 'anchorX' | 'anchorY' | 'bubbleX' | 'bubbleY' | 'bubbleW' | 'bubbleH'>>>>({});
+  const calloutDraftsRef = useRef<Record<number, Partial<Pick<Callout, 'anchorX' | 'anchorY' | 'bubbleX' | 'bubbleY' | 'bubbleW' | 'bubbleH'>>>>({});
+  const renderedCalloutsRef = useRef<Callout[]>([]);
+  const lastCalloutTapRef = useRef<{ id: number; at: number } | null>(null);
+  const calloutTouchDragRef = useRef<{ id: number; part: 'bubble' | 'anchor'; startX: number; startY: number; origX: number; origY: number } | null>(null);
   const [draggingCalloutPart, setDraggingCalloutPart] = useState<'bubble' | 'anchor' | null>(null);
+  const [draggingCalloutId, setDraggingCalloutId] = useState<number | null>(null);
   const [calloutDragStart, setCalloutDragStart] = useState<{ mouseX: number; mouseY: number; origX: number; origY: number } | null>(null);
   const [editingCalloutId, setEditingCalloutId] = useState<number | null>(null);
   const [editingCalloutText, setEditingCalloutText] = useState("");
+
+  const updateCalloutDraft = (id: number, changes: Partial<Pick<Callout, 'anchorX' | 'anchorY' | 'bubbleX' | 'bubbleY' | 'bubbleW' | 'bubbleH'>>) => {
+    setCalloutDrafts(previous => {
+      const next = { ...previous, [id]: { ...previous[id], ...changes } };
+      calloutDraftsRef.current = next;
+      return next;
+    });
+  };
+  const findCalloutHitFromRef = (canvasX: number, canvasY: number) => {
+    const x = canvasX / zoomLevelRef.current;
+    const y = canvasY / zoomLevelRef.current;
+    const anchorRadius = Math.max(8, 12 / zoomLevelRef.current);
+    for (const callout of [...renderedCalloutsRef.current].reverse()) {
+      if (Math.hypot(x - callout.anchorX, y - callout.anchorY) <= anchorRadius) return { callout, part: 'anchor' as const };
+      if (x >= callout.bubbleX && x <= callout.bubbleX + callout.bubbleW && y >= callout.bubbleY && y <= callout.bubbleY + callout.bubbleH) return { callout, part: 'bubble' as const };
+    }
+    return null;
+  };
 
   const baseScale = 2.5; // High quality PDF rendering base scale
   // Maximum safe canvas dimension in pixels — exceeding this causes GPU context loss / crash
@@ -401,6 +425,24 @@ export default function MeasurementCanvas() {
       setSelectedCalloutId(null);
     },
   });
+  const renderedCallouts = useMemo(
+    () => calloutsList.map(callout => ({ ...callout, ...calloutDrafts[callout.id] })),
+    [calloutsList, calloutDrafts],
+  );
+  useEffect(() => {
+    renderedCalloutsRef.current = renderedCallouts;
+  }, [renderedCallouts]);
+  const getCalloutHit = useCallback((canvasX: number, canvasY: number) => {
+    const x = canvasX / zoomLevel;
+    const y = canvasY / zoomLevel;
+    const anchorRadius = Math.max(8, 12 / zoomLevel);
+    for (const callout of [...renderedCallouts].reverse()) {
+      if (Math.hypot(x - callout.anchorX, y - callout.anchorY) <= anchorRadius) return { callout, part: 'anchor' as const };
+      const inBubble = x >= callout.bubbleX && x <= callout.bubbleX + callout.bubbleW && y >= callout.bubbleY && y <= callout.bubbleY + callout.bubbleH;
+      if (inBubble) return { callout, part: 'bubble' as const };
+    }
+    return null;
+  }, [renderedCallouts, zoomLevel]);
 
   const updateProjectMutation = trpc.projects.update.useMutation({
     onSuccess: () => {
@@ -796,7 +838,22 @@ export default function MeasurementCanvas() {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
-      if (isDrawing || isCountingMode) {
+      const calloutHit = !isDrawing && !isCountingMode && !isTextMode && !isRectMode && !isDimMode && !isCalloutMode && !isCutoutMode
+        ? findCalloutHitFromRef(x, y)
+        : null;
+      if (calloutHit) {
+        setSelectedCalloutId(calloutHit.callout.id);
+        calloutTouchDragRef.current = {
+          id: calloutHit.callout.id,
+          part: calloutHit.part,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          origX: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleX : calloutHit.callout.anchorX,
+          origY: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleY : calloutHit.callout.anchorY,
+        };
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+        setIsPanning(false);
+      } else if (isDrawing || isCountingMode || isTextMode || isRectMode || isDimMode || isCalloutMode || isCutoutMode) {
         // In drawing/counting mode: single tap will be handled by touchEnd (tap detection)
         touchStartRef.current = { x: touch.clientX, y: touch.clientY };
       } else {
@@ -806,7 +863,7 @@ export default function MeasurementCanvas() {
         setPanStart({ x: touch.clientX, y: touch.clientY });
       }
     }
-  }, [isDrawing, isCountingMode]);
+  }, [isDrawing, isCountingMode, isTextMode, isRectMode, isDimMode, isCalloutMode, isCutoutMode]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -856,6 +913,16 @@ export default function MeasurementCanvas() {
       const x = touch.clientX - rect.left;
       const y = touch.clientY - rect.top;
 
+      const calloutDrag = calloutTouchDragRef.current;
+      if (calloutDrag) {
+        const dx = (touch.clientX - calloutDrag.startX) / zoomLevelRef.current;
+        const dy = (touch.clientY - calloutDrag.startY) / zoomLevelRef.current;
+        updateCalloutDraft(calloutDrag.id, calloutDrag.part === 'bubble'
+          ? { bubbleX: calloutDrag.origX + dx, bubbleY: calloutDrag.origY + dy }
+          : { anchorX: calloutDrag.origX + dx, anchorY: calloutDrag.origY + dy });
+        return;
+      }
+
       if (isPanning && panStart) {
         const dx = touch.clientX - panStart.x;
         const dy = touch.clientY - panStart.y;
@@ -869,7 +936,7 @@ export default function MeasurementCanvas() {
         setCursorPosition({ x, y });
       }
     }
-  }, [isPanning, panStart, panOffset, isDrawing]);
+  }, [isPanning, panStart, panOffset, isDrawing, isRectMode, isDimMode, isCalloutMode, isCutoutMode]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -885,12 +952,41 @@ export default function MeasurementCanvas() {
       const changedTouch = e.changedTouches[0];
       const startPos = touchStartRef.current;
 
-      if (startPos) {
+      const calloutDrag = calloutTouchDragRef.current;
+      if (calloutDrag) {
+        const dx = Math.abs(changedTouch.clientX - calloutDrag.startX);
+        const dy = Math.abs(changedTouch.clientY - calloutDrag.startY);
+        if (dx < 10 && dy < 10) {
+          const previousTap = lastCalloutTapRef.current;
+          if (previousTap?.id === calloutDrag.id && Date.now() - previousTap.at < 550) {
+            const callout = renderedCalloutsRef.current.find(item => item.id === calloutDrag.id);
+            if (callout) {
+              setEditingCalloutId(callout.id);
+              setEditingCalloutText(callout.text);
+            }
+            lastCalloutTapRef.current = null;
+          } else {
+            lastCalloutTapRef.current = { id: calloutDrag.id, at: Date.now() };
+          }
+        } else {
+          const updates = calloutDraftsRef.current[calloutDrag.id];
+          if (updates) {
+            updateCalloutMutation.mutate({ id: calloutDrag.id, projectId, ...updates }, {
+              onSuccess: () => setCalloutDrafts(previous => {
+                const { [calloutDrag.id]: _saved, ...remaining } = previous;
+                calloutDraftsRef.current = remaining;
+                return remaining;
+              }),
+            });
+          }
+        }
+        calloutTouchDragRef.current = null;
+      } else if (startPos) {
         const dx = Math.abs(changedTouch.clientX - startPos.x);
         const dy = Math.abs(changedTouch.clientY - startPos.y);
         const isTap = dx < 10 && dy < 10; // small movement = tap
 
-        if (isTap && (isDrawing || isCountingMode || isRectMode || isDimMode || isCalloutMode || isCutoutMode)) {
+        if (isTap && (isDrawing || isCountingMode || isTextMode || isRectMode || isDimMode || isCalloutMode || isCutoutMode)) {
           // Treat as a canvas click via ref to avoid forward-reference
           const canvas = overlayCanvasRef.current;
           if (canvas && handleCanvasClickRef.current) {
@@ -910,7 +1006,7 @@ export default function MeasurementCanvas() {
       setPanStart(null);
       setCursorPosition(null);
     }
-  }, [isDrawing, isCountingMode]);
+  }, [isDrawing, isCountingMode, isTextMode, isRectMode, isDimMode, isCalloutMode, isCutoutMode, projectId]);
   // ─────────────────────────────────────────────────────────────────────────────
 
   // Calculate real-world distance from pixel distance
@@ -1391,7 +1487,7 @@ export default function MeasurementCanvas() {
     });
 
     // Draw saved callout bubbles
-    calloutsList.forEach((callout: Callout) => {
+    renderedCallouts.forEach((callout: Callout) => {
       drawCalloutOnCanvas(ctx, callout.anchorX, callout.anchorY, callout.bubbleX, callout.bubbleY,
         callout.bubbleW, callout.bubbleH, callout.text, callout.color, callout.textColor,
         zoomLevel, selectedCalloutId === callout.id);
@@ -1623,7 +1719,7 @@ export default function MeasurementCanvas() {
   // isDrawing and isCountingMode are included so entering/exiting drawing mode triggers a redraw immediately
   useEffect(() => {
     redrawOverlay();
-  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage, isDrawing, isCountingMode, cutoutsList, dimensionLinesList, calloutsList, selectedCalloutId, isDimMode, dimPoint1, dimPoint2, dimStep, dimOffsetPx, dimColor, isCalloutMode, calloutStep, calloutAnchor, isRectMode, rectFirstPoint, isCutoutMode]);
+  }, [measurements, currentPolygon, selectedColor, scale, scaleUnit, zoomLevel, isEditMode, selectedMeasurementId, draggingVertexIndex, isCalibrating, calibrationPoints, hiddenCategories, hiddenMeasurements, textAnnotationsList, selectedTextId, isTextMode, currentPage, isDrawing, isCountingMode, cutoutsList, dimensionLinesList, calloutsList, calloutDrafts, selectedCalloutId, isDimMode, dimPoint1, dimPoint2, dimStep, dimOffsetPx, dimColor, isCalloutMode, calloutStep, calloutAnchor, isRectMode, rectFirstPoint, isCutoutMode]);
 
   // Cursor-move redraws — only when actively drawing/counting (cheap path)
   // isDrawing/isCountingMode/isCalibrating included so the condition re-evaluates when modes change
@@ -1748,6 +1844,25 @@ export default function MeasurementCanvas() {
       return;
     }
 
+    // Callout labels take priority over canvas panning. Drag the bubble to reposition
+    // the label, or drag the anchor dot to move the leader-line target.
+    if (!isDrawing && !isTextMode && !isRectMode && !isDimMode && !isCalloutMode && !isCutoutMode) {
+      const calloutHit = getCalloutHit(x, y);
+      if (calloutHit) {
+        setSelectedCalloutId(calloutHit.callout.id);
+        setDraggingCalloutId(calloutHit.callout.id);
+        setDraggingCalloutPart(calloutHit.part);
+        setCalloutDragStart({
+          mouseX: x,
+          mouseY: y,
+          origX: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleX : calloutHit.callout.anchorX,
+          origY: calloutHit.part === 'bubble' ? calloutHit.callout.bubbleY : calloutHit.callout.anchorY,
+        });
+        return;
+      }
+      if (selectedCalloutId !== null) setSelectedCalloutId(null);
+    }
+
     // Text mode: check for resize handle or drag on existing text boxes
     if (isTextMode || selectedTextId !== null) {
       const normalizedX = x / zoomLevel;
@@ -1813,6 +1928,23 @@ export default function MeasurementCanvas() {
 
   // Handle mouse up
   const handleMouseUp = () => {
+    // Persist a completed callout drag as one database update instead of writing on every pointer move.
+    if (draggingCalloutId !== null && draggingCalloutPart && calloutDragStart) {
+      const updates = calloutDrafts[draggingCalloutId];
+      if (updates) {
+        updateCalloutMutation.mutate({ id: draggingCalloutId, projectId, ...updates }, {
+          onSuccess: () => setCalloutDrafts(previous => {
+            const { [draggingCalloutId]: _saved, ...remaining } = previous;
+            return remaining;
+          }),
+        });
+      }
+      setDraggingCalloutId(null);
+      setDraggingCalloutPart(null);
+      setCalloutDragStart(null);
+      return;
+    }
+
     // Save text annotation position/size on mouse up
     if (draggingTextId !== null && textDragStart) {
       const ann = textAnnotationsList.find(a => a.id === draggingTextId);
@@ -1949,8 +2081,14 @@ export default function MeasurementCanvas() {
           anchorX: calloutAnchor.x, anchorY: calloutAnchor.y,
           bubbleX: normalizedClickX - bubbleW / 2,
           bubbleY: normalizedClickY - bubbleH / 2,
-          bubbleW, bubbleH, text: 'Label',
+          bubbleW, bubbleH, text: '',
           color: '#fef9c3', textColor: '#1e293b',
+        }, {
+          onSuccess: (data) => {
+            setSelectedCalloutId(data.id);
+            setEditingCalloutId(data.id);
+            setEditingCalloutText('');
+          },
         });
       }
       return;
@@ -3361,6 +3499,31 @@ export default function MeasurementCanvas() {
                 </div>
               );
             })()}
+            {/* Inline editor for a callout bubble. It shares the canvas transform so typing stays aligned while panned or zoomed. */}
+            {editingCalloutId !== null && (() => {
+              const callout = renderedCallouts.find(item => item.id === editingCalloutId);
+              if (!callout) return null;
+              return <div style={{ position: 'absolute', left: callout.bubbleX * zoomLevel, top: callout.bubbleY * zoomLevel, width: callout.bubbleW * zoomLevel, height: callout.bubbleH * zoomLevel, zIndex: 101 }}>
+                <textarea
+                  autoFocus
+                  aria-label="Edit callout label"
+                  value={editingCalloutText}
+                  onChange={event => setEditingCalloutText(event.target.value)}
+                  onBlur={() => {
+                    if (editingCalloutId !== null) updateCalloutMutation.mutate({ id: editingCalloutId, projectId, text: editingCalloutText });
+                    setEditingCalloutId(null);
+                  }}
+                  onKeyDown={event => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      setEditingCalloutId(null);
+                    }
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') event.currentTarget.blur();
+                  }}
+                  style={{ width: '100%', height: '100%', resize: 'none', border: '2px solid #3b82f6', borderRadius: 8, padding: Math.max(6, 8 * zoomLevel), fontSize: Math.max(10, 11 * zoomLevel), fontFamily: 'sans-serif', background: callout.color, color: callout.textColor, outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>;
+            })()}
             <canvas
               ref={overlayCanvasRef}
               onClick={(e) => {
@@ -3382,6 +3545,19 @@ export default function MeasurementCanvas() {
                 const rect = canvas.getBoundingClientRect();
                 const x = e.clientX - rect.left;
                 const y = e.clientY - rect.top;
+
+                // Callout label drag — geometry is kept locally during the gesture for smooth 60fps feedback.
+                if (draggingCalloutId !== null && draggingCalloutPart && calloutDragStart) {
+                  const dx = (x - calloutDragStart.mouseX) / zoomLevel;
+                  const dy = (y - calloutDragStart.mouseY) / zoomLevel;
+                  setCalloutDrafts(previous => ({
+                    ...previous,
+                    [draggingCalloutId]: draggingCalloutPart === 'bubble'
+                      ? { ...previous[draggingCalloutId], bubbleX: calloutDragStart.origX + dx, bubbleY: calloutDragStart.origY + dy }
+                      : { ...previous[draggingCalloutId], anchorX: calloutDragStart.origX + dx, anchorY: calloutDragStart.origY + dy },
+                  }));
+                  return;
+                }
 
                 // Text annotation drag
                 if (draggingTextId !== null && textDragStart) {
@@ -3446,8 +3622,17 @@ export default function MeasurementCanvas() {
               onDoubleClick={(e) => {
                 const canvas = overlayCanvasRef.current!;
                 const rect = canvas.getBoundingClientRect();
-                const x = (e.clientX - rect.left) / zoomLevel;
-                const y = (e.clientY - rect.top) / zoomLevel;
+                const canvasX = e.clientX - rect.left;
+                const canvasY = e.clientY - rect.top;
+                const calloutHit = getCalloutHit(canvasX, canvasY);
+                if (calloutHit) {
+                  setSelectedCalloutId(calloutHit.callout.id);
+                  setEditingCalloutId(calloutHit.callout.id);
+                  setEditingCalloutText(calloutHit.callout.text);
+                  return;
+                }
+                const x = canvasX / zoomLevel;
+                const y = canvasY / zoomLevel;
                 const ann = textAnnotationsList.find((a) => {
                   if (a.pageNumber !== currentPage) return false;
                   return x >= a.x && x <= a.x + a.width && y >= a.y && y <= a.y + a.height;
