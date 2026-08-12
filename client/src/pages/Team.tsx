@@ -1,0 +1,26 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { trpc } from "@/lib/trpc";
+import { ArrowLeft, Mail, Trash2, Users } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { useLocation } from "wouter";
+import { toast } from "sonner";
+
+export default function Team() {
+  const { user, loading } = useAuth({ redirectOnUnauthenticated: true });
+  const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
+  const { data: members } = trpc.organizations.members.useQuery(undefined, { enabled: !!user });
+  const { data: invitations } = trpc.organizations.invitations.useQuery(undefined, { enabled: !!user });
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "estimator" | "viewer">("estimator");
+  const invite = trpc.organizations.invite.useMutation({ onSuccess: async () => { setEmail(""); await utils.organizations.invitations.invalidate(); toast.success("Invitation prepared. Email delivery will begin when SMTP is configured."); }, onError: error => toast.error(error.message) });
+  const updateRole = trpc.organizations.updateMemberRole.useMutation({ onSuccess: () => utils.organizations.members.invalidate(), onError: error => toast.error(error.message) });
+  const removeMember = trpc.organizations.removeMember.useMutation({ onSuccess: () => utils.organizations.members.invalidate(), onError: error => toast.error(error.message) });
+  if (loading || !user) return null;
+  const submit = (event: FormEvent) => { event.preventDefault(); invite.mutate({ email, role }); };
+  return <div className="min-h-dvh bg-background"><header className="border-b"><div className="container flex items-center gap-3 py-4"><Button variant="ghost" size="icon" onClick={() => setLocation("/projects")} aria-label="Back to projects"><ArrowLeft className="h-4 w-4" /></Button><Users className="h-5 w-5 text-primary" /><div><h1 className="text-xl font-semibold">Workspace team</h1><p className="text-sm text-muted-foreground">Control who can view and measure within this workspace.</p></div></div></header><main className="container grid max-w-5xl gap-6 py-8 lg:grid-cols-[.8fr_1.2fr]"><Card><CardHeader><CardTitle>Invite a teammate</CardTitle><CardDescription>Invite preparation is available now. Delivery starts automatically after SMTP setup.</CardDescription></CardHeader><CardContent><form className="space-y-3" onSubmit={submit}><div className="space-y-1"><Label htmlFor="team-email">Email address</Label><Input id="team-email" type="email" value={email} onChange={event => setEmail(event.target.value)} required /></div><div className="space-y-1"><Label htmlFor="team-role">Role</Label><select id="team-role" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={role} onChange={event => setRole(event.target.value as typeof role)}><option value="admin">Admin — manage projects and team</option><option value="estimator">Estimator — create and edit takeoffs</option><option value="viewer">Viewer — view projects and exports</option></select></div><Button className="w-full gap-2" type="submit" disabled={invite.isPending}><Mail className="h-4 w-4" />Prepare invitation</Button></form></CardContent></Card><div className="space-y-5"><Card><CardHeader><CardTitle>Members</CardTitle></CardHeader><CardContent className="space-y-3">{members?.map(member => <div key={member.membershipId} className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium">{member.name || member.email}</p><p className="text-sm text-muted-foreground">{member.email}</p></div><div className="flex items-center gap-2">{member.role === "owner" ? <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold capitalize text-primary">Owner</span> : <><select aria-label={`Role for ${member.email}`} className="h-9 rounded-md border bg-background px-2 text-sm" value={member.role} onChange={event => updateRole.mutate({ membershipId: member.membershipId, role: event.target.value as "admin" | "estimator" | "viewer" })}><option value="admin">Admin</option><option value="estimator">Estimator</option><option value="viewer">Viewer</option></select><Button variant="ghost" size="icon" className="text-destructive" onClick={() => removeMember.mutate({ membershipId: member.membershipId })} aria-label={`Remove ${member.email}`}><Trash2 className="h-4 w-4" /></Button></>}</div></div>)}</CardContent></Card><Card><CardHeader><CardTitle>Pending invitations</CardTitle><CardDescription>These invitations will be delivered once outbound email is configured.</CardDescription></CardHeader><CardContent className="space-y-2">{invitations?.length ? invitations.map(invite => <div key={invite.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"><span>{invite.email}</span><span className="capitalize text-muted-foreground">{invite.role}</span></div>) : <p className="text-sm text-muted-foreground">No pending invitations.</p>}</CardContent></Card></div></main></div>;
+}

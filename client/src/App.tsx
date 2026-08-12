@@ -10,6 +10,7 @@ import Signup from "./pages/Signup";
 import Pricing from "./pages/Pricing";
 import Billing from "./pages/Billing";
 import PlatformAdmin from "./pages/PlatformAdmin";
+import Team from "./pages/Team";
 import Projects from "./pages/Projects";
 import MeasurementCanvas from "./pages/MeasurementCanvas";
 
@@ -22,6 +23,7 @@ function Router() {
       <Route path={"/pricing"} component={Pricing} />
       <Route path={"/billing"} component={Billing} />
       <Route path={"/platform-admin"} component={PlatformAdmin} />
+      <Route path={"/team"} component={Team} />
       <Route path={"/projects"} component={Projects} />
       <Route path={"/project/:id"} component={MeasurementCanvas} />
       <Route path={"/404"} component={NotFound} />

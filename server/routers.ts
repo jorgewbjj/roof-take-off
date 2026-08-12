@@ -260,6 +260,9 @@ export const appRouter = router({
         });
         return { success: true } as const;
       }),
+    organizations: platformOwnerProcedure.query(async () => {
+      return db.listPlatformOrganizations();
+    }),
   }),
 
   organizations: router({
@@ -269,6 +272,56 @@ export const appRouter = router({
     active: protectedProcedure.query(async ({ ctx }) => {
       return ctx.activeOrganization;
     }),
+    members: organizationProcedure.query(async ({ ctx }) => {
+      return db.listOrganizationMembers(ctx.activeOrganization.organizationId);
+    }),
+    invitations: organizationAdminProcedure.query(async ({ ctx }) => {
+      return db.listOrganizationInvitations(ctx.activeOrganization.organizationId);
+    }),
+    invite: organizationAdminProcedure
+      .input(z.object({ email: z.string().email(), role: z.enum(["admin", "estimator", "viewer"]).default("estimator") }))
+      .mutation(async ({ ctx, input }) => {
+        const organizationId = ctx.activeOrganization.organizationId;
+        const [members, subscription, usage] = await Promise.all([
+          db.listOrganizationMembers(organizationId),
+          db.getOrganizationSubscription(organizationId),
+          db.getOrganizationUsage(organizationId),
+        ]);
+        const email = normalizeEmail(input.email);
+        if (members.some(member => member.email?.toLowerCase() === email)) {
+          throw new TRPCError({ code: "CONFLICT", message: "This person is already a member of the workspace." });
+        }
+        if (subscription?.plan.maxSeats !== null && subscription?.plan.maxSeats !== undefined && usage.seatCount >= subscription.plan.maxSeats) {
+          throw new TRPCError({ code: "FORBIDDEN", message: `Your ${subscription.plan.name} plan allows up to ${subscription.plan.maxSeats} seats. Upgrade to invite another teammate.` });
+        }
+        await db.createOrganizationInvitation({
+          organizationId,
+          email,
+          role: input.role,
+          tokenHash: hashOpaqueToken(createOpaqueToken()),
+          invitedByUserId: ctx.user.id,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        });
+        return { success: true, deliveryPending: true };
+      }),
+    updateMemberRole: organizationAdminProcedure
+      .input(z.object({ membershipId: z.number().int().positive(), role: z.enum(["admin", "estimator", "viewer"]) }))
+      .mutation(async ({ ctx, input }) => {
+        const member = (await db.listOrganizationMembers(ctx.activeOrganization.organizationId)).find(item => item.membershipId === input.membershipId);
+        if (!member) throw new TRPCError({ code: "NOT_FOUND", message: "Workspace member not found." });
+        if (member.role === "owner") throw new TRPCError({ code: "FORBIDDEN", message: "The workspace owner role cannot be changed." });
+        await db.updateOrganizationMemberRole(ctx.activeOrganization.organizationId, input.membershipId, input.role);
+        return { success: true };
+      }),
+    removeMember: organizationAdminProcedure
+      .input(z.object({ membershipId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const member = (await db.listOrganizationMembers(ctx.activeOrganization.organizationId)).find(item => item.membershipId === input.membershipId);
+        if (!member) throw new TRPCError({ code: "NOT_FOUND", message: "Workspace member not found." });
+        if (member.role === "owner") throw new TRPCError({ code: "FORBIDDEN", message: "The workspace owner cannot be removed." });
+        await db.removeOrganizationMember(ctx.activeOrganization.organizationId, input.membershipId);
+        return { success: true };
+      }),
   }),
 
   projects: router({

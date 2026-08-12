@@ -534,10 +534,10 @@
 - [ ] Configure SMTP and enable customer password-reset, invitation, and welcome-email delivery after sender credentials are provided
 - [x] Scope all project, measurement, annotation, category, PDF storage, and export access to the active organization with owner/admin/estimator/viewer authorization
 - [x] Add master-owner subscription-plan administration, including configurable plan pricing, limits, and Stripe price mapping
-- [ ] Add master-owner organization oversight, seat management, and teammate invitations after SMTP delivery is configured
+- [x] Add master-owner organization oversight, seat management, pending invitation preparation, and role controls
 - [x] Implement Stripe Checkout, 14-day no-card trial, customer billing portal, signature-verified webhook handling, idempotent event tracking, and server-enforced project limits
 - [ ] Claim the Stripe test sandbox and create the first paid plan from Platform Administration before accepting test subscriptions
 - [x] Build public pricing, branded sign-up, automatic workspace onboarding, workspace switching, subscription management, and account navigation screens
-- [ ] Enable teammate invitation UI after SMTP delivery is configured
+- [x] Add teammate invitation UI with pending-delivery status; SMTP delivery activation remains tracked separately
 - [x] Add credential-auth, workspace-category authorization, trial-entitlement, migration-preservation, and full regression test coverage; verify legacy projects remain accessible to the owner
 - [x] Remove SaaS test data and prepare the final checkpoint; document production secrets and Stripe configuration steps

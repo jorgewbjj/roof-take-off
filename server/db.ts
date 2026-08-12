@@ -1,7 +1,7 @@
 import { eq, desc, and, gt, isNull, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { InsertUser, users, projects, measurements, InsertProject, InsertMeasurement, countingCategories, InsertCountingCategory, textAnnotations, InsertTextAnnotation, planTabs, InsertPlanTab, cutouts, InsertCutout, dimensionLines, InsertDimensionLine, callouts, InsertCallout } from "../drizzle/schema";
-import { authSessions, billingWebhookEvents, organizationMembers, organizations, organizationSubscriptions, passwordResetTokens, subscriptionPlans } from "../drizzle/saas-schema";
+import { authSessions, billingWebhookEvents, organizationInvitations, organizationMembers, organizations, organizationSubscriptions, passwordResetTokens, subscriptionPlans } from "../drizzle/saas-schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -309,6 +309,78 @@ export async function listUserOrganizations(userId: number) {
     .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
     .where(and(eq(organizationMembers.userId, userId), eq(organizations.status, "active")))
     .orderBy(organizations.name);
+}
+
+export async function listOrganizationMembers(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    membershipId: organizationMembers.id,
+    userId: users.id,
+    name: users.name,
+    email: users.email,
+    role: organizationMembers.role,
+    createdAt: organizationMembers.createdAt,
+  })
+    .from(organizationMembers)
+    .innerJoin(users, eq(organizationMembers.userId, users.id))
+    .where(eq(organizationMembers.organizationId, organizationId))
+    .orderBy(organizationMembers.createdAt);
+}
+
+export async function listOrganizationInvitations(organizationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: organizationInvitations.id,
+    email: organizationInvitations.email,
+    role: organizationInvitations.role,
+    expiresAt: organizationInvitations.expiresAt,
+    acceptedAt: organizationInvitations.acceptedAt,
+    createdAt: organizationInvitations.createdAt,
+  })
+    .from(organizationInvitations)
+    .where(eq(organizationInvitations.organizationId, organizationId))
+    .orderBy(desc(organizationInvitations.createdAt));
+}
+
+export async function createOrganizationInvitation(input: {
+  organizationId: number;
+  email: string;
+  role: "admin" | "estimator" | "viewer";
+  tokenHash: string;
+  invitedByUserId: number;
+  expiresAt: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(organizationInvitations).values(input);
+  return Number(result[0].insertId);
+}
+
+export async function updateOrganizationMemberRole(organizationId: number, membershipId: number, role: "admin" | "estimator" | "viewer") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(organizationMembers).set({ role })
+    .where(and(eq(organizationMembers.id, membershipId), eq(organizationMembers.organizationId, organizationId)));
+}
+
+export async function removeOrganizationMember(organizationId: number, membershipId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(organizationMembers)
+    .where(and(eq(organizationMembers.id, membershipId), eq(organizationMembers.organizationId, organizationId)));
+}
+
+export async function listPlatformOrganizations() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select({ organization: organizations, subscription: organizationSubscriptions, plan: subscriptionPlans })
+    .from(organizations)
+    .leftJoin(organizationSubscriptions, eq(organizations.id, organizationSubscriptions.organizationId))
+    .leftJoin(subscriptionPlans, eq(organizationSubscriptions.planId, subscriptionPlans.id))
+    .orderBy(desc(organizations.createdAt));
+  return Promise.all(rows.map(async (row) => ({ ...row, usage: await getOrganizationUsage(row.organization.id) })));
 }
 
 export async function getOrganizationProjects(organizationId: number) {

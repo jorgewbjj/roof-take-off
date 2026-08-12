@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Plus, FileText, Trash2, Loader2, LogOut, CreditCard, ShieldCheck } from "lucide-react";
+import { Plus, FileText, Trash2, Loader2, LogOut, CreditCard, ShieldCheck, Users } from "lucide-react";
 import { PDFThumbnail } from "@/components/PDFThumbnail";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useRef } from "react";
@@ -141,6 +141,7 @@ export default function Projects() {
           <div className="flex items-center gap-2">
             {workspaces && workspaces.length > 1 && <select aria-label="Active workspace" defaultValue={window.localStorage.getItem("roof-plan-active-organization") ?? workspaces[0]?.organizationId} onChange={event => { window.localStorage.setItem("roof-plan-active-organization", event.target.value); window.location.reload(); }} className="h-9 max-w-[150px] rounded-md border bg-background px-2 text-sm"><>{workspaces.map(workspace => <option key={workspace.organizationId} value={workspace.organizationId}>{workspace.organizationName}</option>)}</></select>}
             <span className="text-sm text-muted-foreground hidden sm:inline truncate max-w-[140px]">{user.name || user.email}</span>
+            <Button variant="outline" size="sm" asChild className="gap-2"><a href="/team"><Users className="w-4 h-4" /><span className="hidden lg:inline">Team</span></a></Button>
             <Button variant="outline" size="sm" asChild className="gap-2"><a href="/billing"><CreditCard className="w-4 h-4" /><span className="hidden lg:inline">Billing</span></a></Button>
             {user.isPlatformOwner && <Button variant="outline" size="sm" asChild className="gap-2"><a href="/platform-admin"><ShieldCheck className="w-4 h-4" /><span className="hidden lg:inline">Admin</span></a></Button>}
             <Button variant="outline" size="sm" onClick={() => logout()} className="gap-2">
