@@ -553,3 +553,8 @@
 - [x] Fix counting mode so every tap/click adds another marker during a single active counting session
 - [x] Add a clear Stop Counting action that commits the accumulated total only when the user finishes
 - [x] Keep counting responsive during rapid consecutive clicks and support desktop and iPad touch input
+
+## Interface Improvements - Phase 16 (On-Demand Summary)
+- [x] Make the right-side measurement summary hidden by default with a clear Show Summary control
+- [x] Add a desktop hover/focus preview without relying on hover for iPad or other touch devices
+- [x] Keep the summary accessible via a touch-friendly toggle without obstructing the canvas

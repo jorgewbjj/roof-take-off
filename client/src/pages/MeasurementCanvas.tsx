@@ -221,6 +221,9 @@ export default function MeasurementCanvas() {
   // Touch gesture state
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // mobile bottom drawer
+  const [isDesktopSummaryPinned, setIsDesktopSummaryPinned] = useState(false);
+  const [isDesktopSummaryHovering, setIsDesktopSummaryHovering] = useState(false);
+  const isDesktopSummaryOpen = isDesktopSummaryPinned || isDesktopSummaryHovering;
 
   // ─── Text Annotation state ────────────────────────────────────────────────────
   const [isTextMode, setIsTextMode] = useState(false);
@@ -2945,15 +2948,24 @@ export default function MeasurementCanvas() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* Mobile: sidebar toggle button */}
+            {/* On-demand measurement summary: touch toggle on mobile, pin/hover preview on desktop */}
             <Button
               variant="outline"
               size="sm"
-              className="md:hidden"
-              onClick={() => setIsSidebarOpen(prev => !prev)}
+              className="h-9 shrink-0 gap-1.5"
+              aria-expanded={isSidebarOpen || isDesktopSummaryPinned}
+              aria-controls="measurement-summary-panel"
+              onClick={() => {
+                if (window.matchMedia('(min-width: 768px)').matches) {
+                  setIsDesktopSummaryPinned(prev => !prev);
+                  setIsDesktopSummaryHovering(false);
+                } else {
+                  setIsSidebarOpen(prev => !prev);
+                }
+              }}
             >
-              <ChevronRight className="w-4 h-4" />
-              <span className="ml-1 text-xs">Measurements</span>
+              {isSidebarOpen || isDesktopSummaryPinned ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              <span className="text-xs">{isSidebarOpen || isDesktopSummaryPinned ? 'Hide Summary' : 'Summary'}</span>
             </Button>
             <Button
               variant="outline"
@@ -3733,7 +3745,26 @@ export default function MeasurementCanvas() {
           </div>
         </div>
 
-        {/* Sidebar - desktop: always visible right panel; mobile: slide-up overlay */}
+        {/* Desktop collapsed summary rail — hover previews, click pins, and keyboard focus opens it. */}
+        <button
+          type="button"
+          className="hidden md:flex w-10 shrink-0 items-center justify-center border-l border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-label="Show measurement summary"
+          aria-controls="measurement-summary-panel"
+          onMouseEnter={() => setIsDesktopSummaryHovering(true)}
+          onMouseLeave={() => setIsDesktopSummaryHovering(false)}
+          onFocus={() => setIsDesktopSummaryHovering(true)}
+          onBlur={() => setIsDesktopSummaryHovering(false)}
+          onClick={() => {
+            setIsDesktopSummaryPinned(true);
+            setIsDesktopSummaryHovering(false);
+          }}
+          title="Hover to preview measurements, click to keep open"
+        >
+          <span className="[writing-mode:vertical-rl] rotate-180 text-xs font-semibold tracking-wide">SUMMARY</span>
+        </button>
+
+        {/* Sidebar - desktop: on-demand panel; mobile: slide-up overlay */}
         {/* Mobile overlay backdrop */}
         {isSidebarOpen && (
           <div
@@ -3743,10 +3774,14 @@ export default function MeasurementCanvas() {
         )}
         <div
           ref={sidebarRef}
+          id="measurement-summary-panel"
+          onMouseEnter={() => setIsDesktopSummaryHovering(true)}
+          onMouseLeave={() => setIsDesktopSummaryHovering(false)}
           className={[
             "bg-card overflow-y-auto flex-shrink-0 z-50",
-            // Desktop: always-visible right panel
-            "md:w-80 md:border-l md:border-border md:relative md:translate-y-0",
+            // Desktop: hide by default; the rail hover or Summary button reveals the panel.
+            "md:relative md:translate-y-0 md:transition-[width,opacity] md:duration-200 md:ease-out",
+            isDesktopSummaryOpen ? "md:w-80 md:opacity-100 md:border-l md:border-border md:overflow-y-auto" : "md:w-0 md:opacity-0 md:overflow-hidden md:pointer-events-none",
             // Mobile: fixed bottom sheet, full-width, slides up when open
             "fixed bottom-0 left-0 right-0 md:static",
             "max-h-[70vh] md:max-h-none",
