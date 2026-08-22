@@ -558,3 +558,6 @@
 - [x] Make the right-side measurement summary hidden by default with a clear Show Summary control
 - [x] Add a desktop hover/focus preview without relying on hover for iPad or other touch devices
 - [x] Keep the summary accessible via a touch-friendly toggle without obstructing the canvas
+
+## Delivery - Phase 17 (GitHub Synchronization)
+- [ ] Commit and push the complete current project state to jorgewbjj/roof-take-off
